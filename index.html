@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitoreo Espectral - Mini App</title>
+    <!-- SDK de Telegram Web App -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Librería Pako para descompresión Zlib -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+    <!-- Chart.js para renderizar la traza espectral -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --text-color: #e0e0e0;
+            --accent-color: #00ff00;
+            --border-color: #333333;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 10px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--card-bg);
+            padding: 10px 15px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 10px;
+        }
+        h2 { margin: 0; font-size: 1.1rem; color: #fff; }
+        #user-info { font-size: 0.8rem; color: #888; }
+        
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+        label { display: block; font-size: 0.85rem; margin-bottom: 5px; color: #aaa; }
+        select, button {
+            width: 100%;
+            padding: 8px;
+            background: #2a2a2a;
+            color: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 0.9rem;
+            box-sizing: border-box;
+            margin-bottom: 8px;
+        }
+        .nav-time {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .nav-time button {
+            flex: 1;
+            background: #004400;
+            border-color: #00aa00;
+            cursor: pointer;
+        }
+        .nav-time button:active { background: #006600; }
+        
+        .chart-container {
+            position: relative;
+            height: 250px;
+            width: 100%;
+            background: #000;
+            border-radius: 6px;
+            border: 1px solid #222;
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin-top: 10px;
+            font-size: 0.85rem;
+        }
+        .metric-box {
+            background: #252525;
+            padding: 8px;
+            border-radius: 6px;
+            border-left: 3px solid var(--accent-color);
+        }
+        .metric-title { color: #888; font-size: 0.75rem; }
+        .metric-value { font-weight: bold; color: #fff; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <div>
+            <h2>🛰️ Espectro FPH</h2>
+            <div id="user-info">Conectando con Telegram...</div>
+        </div>
+        <div id="connection-status" style="font-size: 0.75rem; color: #00ff00;">● Online</div>
+    </header>
+
+    <!-- Controles de Selección -->
+    <div class="card">
+        <label for="select-remota">Seleccionar Remota / Portadora:</label>
+        <select id="select-remota">
+            <option value="">-- Cargando portadoras desde Sheets --</option>
+        </select>
+
+        <label>Navegación Histórica en el Tiempo:</label>
+        <div class="nav-time">
+            <button id="btn-prev">◀ Anterior</button>
+            <span id="lbl-timestamp" style="font-size: 0.8rem; text-align: center; flex: 1;">--/-- --:--</span>
+            <button id="btn-next">Siguiente ▶</button>
+        </div>
+    </div>
+
+    <!-- Panel de Gráfica Estilo FPH -->
+    <div class="card">
+        <div class="chart-container">
+            <canvas id="spectrumChart"></canvas>
+        </div>
+        <div class="metrics-grid">
+            <div class="metric-box">
+                <div class="metric-title">ESTADO</div>
+                <div class="metric-value" id="val-estado">--</div>
+            </div>
+            <div class="metric-box" style="border-left-color: #ff00ff;">
+                <div class="metric-title">POTENCIA PROMEDIO</div>
+                <div class="metric-value" id="val-potencia">-- dBm</div>
+            </div>
+            <div class="metric-box" style="border-left-color: #00ffff;">
+                <div class="metric-title">DELTA / RIPPLE</div>
+                <div class="metric-value" id="val-delta">-- dB</div>
+            </div>
+            <div class="metric-box" style="border-left-color: #ff3333;">
+                <div class="metric-title">PISO DE RUIDO</div>
+                <div class="metric-value" id="val-piso">-- dBm</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Inicializar Telegram Web App
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+
+    // Validar usuario al cargar
+    window.addEventListener('DOMContentLoaded', () => {
+        const user = tg.initDataUnsafe?.user;
+        if (user) {
+            document.getElementById('user-info').innerText = `Supervisor: ${user.first_name} (@${user.username || 'N/A'})`;
+        } else {
+            document.getElementById('user-info').innerText = `Modo Prueba / Web Externa`;
+        }
+        
+        initChart();
+    });
+
+    let chartInstance = null;
+
+    function initChart() {
+        const ctx = document.getElementById('spectrumChart').getContext('2d');
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: Array.from({length: 711}, (_, i) => i), // 711 puntos del FPH
+                datasets: [{
+                    label: 'Traza Espectral',
+                    data: Array(711).fill(-120),
+                    borderColor: '#00FF00',
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { display: false }, // Ocultar eje X numérico, simula analizador
+                    y: {
+                        min: -110,
+                        max: -50,
+                        grid: { color: '#222' },
+                        ticks: { color: '#666', font: { size: 10 } }
+                    }
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+    }
+
+    // Función auxiliar para descomprimir trazas base64 con Pako (Zlib)
+    function descomprimirTraza(base64Str) {
+        try {
+            const binString = atob(base64Str);
+            const len = binString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binString.charCodeAt(i);
+            }
+            const decompressedData = pako.inflate(bytes, { to: 'string' });
+            const puntosEnteros = decompressedData.split(',').map(Number);
+            // Revertir cuantización (-val / 100.0)
+            return puntosEnteros.map(val => -val / 100.0);
+        } catch (error) {
+            console.error("Error al descomprimir traza:", error);
+            return Array(711).fill(-120);
+        }
+    }
+</script>
+
+</body>
+</html>
