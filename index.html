@@ -25,7 +25,7 @@
             padding: 10px;
         }
         .container {
-            max-width: 600px;
+            max-width: 650px;
             margin: 0 auto;
         }
         .view { display: none; }
@@ -41,8 +41,8 @@
             border: 1px solid var(--border-color);
             margin-bottom: 10px;
         }
-        h2 { margin: 0; font-size: 1.1rem; color: #fff; }
-        #user-info { font-size: 0.8rem; color: #888; }
+        h2 { margin: 0; font-size: 1.05rem; color: #fff; }
+        #user-info { font-size: 0.78rem; color: #888; }
         
         .card {
             background: var(--card-bg);
@@ -51,7 +51,7 @@
             padding: 12px;
             margin-bottom: 10px;
         }
-        label { display: block; font-size: 0.85rem; margin-bottom: 5px; color: #aaa; }
+        label { display: block; font-size: 0.82rem; margin-bottom: 5px; color: #aaa; }
         select, button {
             width: 100%;
             padding: 9px;
@@ -59,13 +59,13 @@
             color: #fff;
             border: 1px solid var(--border-color);
             border-radius: 6px;
-            font-size: 0.9rem;
+            font-size: 0.88rem;
             box-sizing: border-box;
             margin-bottom: 8px;
         }
         .nav-time {
             display: flex;
-            gap: 10px;
+            gap: 8px;
             align-items: center;
         }
         .nav-time button {
@@ -74,23 +74,30 @@
             border-color: #00aa00;
             cursor: pointer;
             margin-bottom: 0;
+            font-weight: 600;
         }
-        .nav-time button:active { background: #006600; }
+        .nav-time button:disabled {
+            background: #252525;
+            border-color: #333;
+            color: #666;
+            cursor: not-allowed;
+        }
+        .nav-time button:not(:disabled):active { background: #006600; }
         
         .chart-container {
             position: relative;
-            height: 260px;
+            height: 300px;
             width: 100%;
             background: #000;
             border-radius: 6px;
-            border: 1px solid #222;
+            border: 1px solid #333;
         }
         .metrics-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
             gap: 8px;
             margin-top: 10px;
-            font-size: 0.85rem;
+            font-size: 0.82rem;
         }
         .metric-box {
             background: #252525;
@@ -98,8 +105,8 @@
             border-radius: 6px;
             border-left: 3px solid var(--accent-color);
         }
-        .metric-title { color: #888; font-size: 0.75rem; }
-        .metric-value { font-weight: bold; color: #fff; }
+        .metric-title { color: #888; font-size: 0.72rem; }
+        .metric-value { font-weight: bold; color: #fff; margin-top: 2px; }
         .status-box {
             text-align: center;
             padding: 40px 15px;
@@ -125,10 +132,10 @@
     <div id="viewPrincipal" class="view">
         <header>
             <div>
-                <h2>🛰️ Espectro FPH</h2>
+                <h2>🛰️ Analizador Espectral FPH</h2>
                 <div id="user-info">Operador: --</div>
             </div>
-            <div id="connection-status" style="font-size: 0.75rem; color: #00ff00;">● Autorizado</div>
+            <div id="connection-status" style="font-size: 0.75rem; color: #00ff00;">● En línea</div>
         </header>
 
         <!-- Controles de Selección -->
@@ -138,11 +145,11 @@
                 <option value="">-- Seleccione una portadora --</option>
             </select>
 
-            <label>Navegación Histórica en el Tiempo:</label>
+            <label>Navegación Histórica (<span id="lbl-contador">0/0</span>):</label>
             <div class="nav-time">
-                <button id="btn-prev">◀ Anterior</button>
-                <span id="lbl-timestamp" style="font-size: 0.8rem; text-align: center; flex: 1;">--/-- --:--</span>
-                <button id="btn-next">Siguiente ▶</button>
+                <button id="btn-prev" disabled>◀ Anterior</button>
+                <span id="lbl-timestamp" style="font-size: 0.78rem; text-align: center; flex: 1.4; font-family: monospace; color: #00ff00;">Sin traza</span>
+                <button id="btn-next" disabled>Siguiente ▶</button>
             </div>
         </div>
 
@@ -161,11 +168,11 @@
                     <div class="metric-value" id="val-transponder">--</div>
                 </div>
                 <div class="metric-box" style="border-left-color: #00ffff;">
-                    <div class="metric-title">POTENCIA / DELTA</div>
+                    <div class="metric-title">NIVEL PICO / DELTA</div>
                     <div class="metric-value" id="val-delta">-- dB</div>
                 </div>
                 <div class="metric-box" style="border-left-color: #ff3333;">
-                    <div class="metric-title">PISO CALIBRADO</div>
+                    <div class="metric-title">PISO BASE TRANSPONDER</div>
                     <div class="metric-value" id="val-piso">-- dBm</div>
                 </div>
             </div>
@@ -176,6 +183,8 @@
 
 <script>
     const URL_WEBAPP = "https://script.google.com/macros/s/AKfycbxLuOURWX0-EjkTItoLh5upIPL0BVDwdZ6FWdX-BuvUzyluJNe9hficn6KK75m-8e0s/exec";
+    const TAMANO_LOTE = 30;
+    const MAX_ESTACIONES_CACHE = 10; // Límite LRU de estaciones en memoria RAM
     
     const tg = window.Telegram ? window.Telegram.WebApp : null;
     if (tg) {
@@ -183,7 +192,6 @@
         tg.ready();
     }
 
-    // Obtener ID y nombre de Telegram (con respaldo por parámetro URL para pruebas)
     const paramsUrl = new URLSearchParams(window.location.search);
     let userId = paramsUrl.get("userId") || "";
     let userName = "Operador";
@@ -199,7 +207,41 @@
 
     let listaPortadorasGlobal = [];
     let configAnalizadorGlobal = {};
+    
+    // Caché LRU: Map conserva el orden de inserción para expulsar la estación más antigua si supera 10
+    // Estructura valor: { items: [{timestamp, trazaBase64, puntosDescomprimidos?}], hayMas: bool, totalDisponibles: num }
+    const cacheLRU = new Map();
+
+    let portadoraSeleccionada = null;
+    let indiceTrazaActual = -1;
+    let cargandoLote = false;
     let chartInstance = null;
+
+    function safeFloat(val, def = 0.0) {
+        if (val === null || val === undefined || String(val).trim() === "") return def;
+        const num = parseFloat(String(val).trim().replace(',', '.'));
+        return isNaN(num) ? def : num;
+    }
+
+    function obtenerDesdeCache(portId) {
+        if (!cacheLRU.has(portId)) return null;
+        const entrada = cacheLRU.get(portId);
+        // Refrescar prioridad LRU (mover al final del Map)
+        cacheLRU.delete(portId);
+        cacheLRU.set(portId, entrada);
+        return entrada;
+    }
+
+    function guardarEnCache(portId, entrada) {
+        if (cacheLRU.has(portId)) {
+            cacheLRU.delete(portId);
+        } else if (cacheLRU.size >= MAX_ESTACIONES_CACHE) {
+            // Eliminar la estación más antigua (primera clave del Map)
+            const claveMasAntigua = cacheLRU.keys().next().value;
+            cacheLRU.delete(claveMasAntigua);
+        }
+        cacheLRU.set(portId, entrada);
+    }
 
     function mostrarVista(idVista) {
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -212,9 +254,108 @@
             <div style="font-size: 2.5rem; margin-bottom: 12px;">⛔</div>
             <h2 style="color: var(--error-color); margin-bottom: 8px;">Acceso Denegado</h2>
             <p style="font-size: 0.85rem; color: #aaa; line-height: 1.5;">
-                ${motivo || "Tu ID de Telegram no está autorizado en la configuración del sistema."}
+                ${motivo || "Tu ID de Telegram no está autorizado."}
             </p>
         `;
+    }
+
+    // Plugin personalizado para dibujar marcas RF y etiquetas verticales estilo R&S FPH
+    const fphOverlayPlugin = {
+        id: 'fphOverlay',
+        afterDatasetsDraw(chart) {
+            if (!portadoraSeleccionada || indiceTrazaActual < 0) return;
+
+            const { ctx, chartArea: { top, bottom, left, right }, scales: { y } } = chart;
+            const frecCentro = safeFloat(portadoraSeleccionada.frecuencia);
+            const bw = safeFloat(portadoraSeleccionada.bandwidth, 1.0);
+            const span = safeFloat(configAnalizadorGlobal.FPH_SPAN_MHZ, 7.5);
+            const polActiva = (portadoraSeleccionada.polarizacion || "").toUpperCase();
+
+            const fMin = frecCentro - (span / 2.0);
+            const fMax = frecCentro + (span / 2.0);
+
+            const freqToPixelX = (freq) => {
+                const ratio = (freq - fMin) / (fMax - fMin);
+                return left + ratio * (right - left);
+            };
+
+            ctx.save();
+
+            // 1. Línea vertical frecuencia central teórica
+            const xCentro = freqToPixelX(frecCentro);
+            ctx.strokeStyle = '#0088FF';
+            ctx.lineWidth = 1.3;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(xCentro, top);
+            ctx.lineTo(xCentro, bottom);
+            ctx.stroke();
+
+            // 2. Límites de BW asignado
+            const xBwIzq = freqToPixelX(frecCentro - bw / 2.0);
+            const xBwDer = freqToPixelX(frecCentro + bw / 2.0);
+            ctx.strokeStyle = '#666666';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([2, 3]);
+            [xBwIzq, xBwDer].forEach(posX => {
+                if (posX >= left && posX <= right) {
+                    ctx.beginPath();
+                    ctx.moveTo(posX, top);
+                    ctx.lineTo(posX, bottom);
+                    ctx.stroke();
+                }
+            });
+
+            // 3. Línea horizontal de Piso de Ruido Base
+            const pisoBase = obtenerPisoBase(portadoraSeleccionada.transponder);
+            const yPiso = y.getPixelForValue(pisoBase);
+            if (yPiso >= top && yPiso <= bottom) {
+                ctx.strokeStyle = '#FF3333';
+                ctx.lineWidth = 1.2;
+                ctx.setLineDash([3, 3]);
+                ctx.beginPath();
+                ctx.moveTo(left, yPiso);
+                ctx.lineTo(right, yPiso);
+                ctx.stroke();
+            }
+
+            // 4. Etiquetas verticales de portadoras visibles dentro del SPAN
+            ctx.setLineDash([]);
+            const datosTraza = chart.data.datasets[0].data;
+            const vecinas = listaPortadorasGlobal.filter(p => {
+                const f = safeFloat(p.frecuencia);
+                const pol = (p.polarizacion || "").toUpperCase();
+                return pol === polActiva && f >= fMin && f <= fMax;
+            });
+
+            vecinas.forEach(v => {
+                const fVec = safeFloat(v.frecuencia);
+                const xVec = freqToPixelX(fVec);
+                const idxPunto = Math.min(710, Math.max(0, Math.round(((fVec - fMin) / span) * 710)));
+                const ampPunto = datosTraza[idxPunto] || -100;
+                let yTexto = y.getPixelForValue(ampPunto) - 8;
+                if (yTexto < top + 45) yTexto = top + 45;
+
+                const esPrincipal = String(v.id) === String(portadoraSeleccionada.id);
+                ctx.save();
+                ctx.translate(xVec, yTexto);
+                ctx.rotate(-Math.PI / 2);
+                ctx.font = esPrincipal ? 'bold 10px sans-serif' : '9px sans-serif';
+                ctx.fillStyle = esPrincipal ? '#FFFF00' : '#B0B0B0';
+                ctx.textAlign = 'left';
+                ctx.fillText(v.estacion, 0, 3);
+                ctx.restore();
+            });
+
+            ctx.restore();
+        }
+    };
+
+    function obtenerPisoBase(transponder) {
+        if (!transponder) return -90.0;
+        const transNorm = String(transponder).replace(/\s+/g, '').replace(/\//g, '').toUpperCase();
+        const clave = `FPH_PISO_RUIDO_${transNorm}`;
+        return safeFloat(configAnalizadorGlobal[clave], -90.0);
     }
 
     window.addEventListener('DOMContentLoaded', () => {
@@ -234,17 +375,16 @@
                     return;
                 }
 
-                // Usuario autorizado: cargar datos en memoria y poblar selector
                 listaPortadorasGlobal = data.portadoras || [];
                 configAnalizadorGlobal = data.config || {};
 
-                document.getElementById('user-info').innerText = `Operador: ${userName} (ID: ${userId})`;
+                document.getElementById('user-info').innerText = `Operador: ${userName}`;
                 poblarSelectorPortadoras(listaPortadorasGlobal);
                 initChart();
                 mostrarVista('viewPrincipal');
             })
             .catch(err => {
-                mostrarAccesoDenegado("Error de conexión con el servidor: " + err.message);
+                mostrarAccesoDenegado("Error de conexión: " + err.message);
             });
     });
 
@@ -252,7 +392,6 @@
         const select = document.getElementById('select-remota');
         select.innerHTML = '<option value="">-- Seleccione una portadora (' + portadoras.length + ') --</option>';
         
-        // Ordenar alfabéticamente por nombre de estación
         const ordenadas = [...portadoras].sort((a, b) => 
             String(a.estacion).localeCompare(String(b.estacion))
         );
@@ -265,22 +404,197 @@
         });
 
         select.addEventListener('change', function() {
-            const idSel = this.value;
-            const port = listaPortadorasGlobal.find(item => String(item.id) === String(idSel));
-            if (port) {
-                document.getElementById('val-frec').innerText = `${port.frecuencia} MHz / ${port.bandwidth} MHz`;
-                document.getElementById('val-transponder').innerText = `${port.transponder}`;
+            const idSel = String(this.value);
+            portadoraSeleccionada = listaPortadorasGlobal.find(item => String(item.id) === idSel) || null;
+            
+            if (portadoraSeleccionada) {
+                document.getElementById('val-frec').innerText = `${portadoraSeleccionada.frecuencia} MHz / ${portadoraSeleccionada.bandwidth} MHz`;
+                document.getElementById('val-transponder').innerText = `${portadoraSeleccionada.transponder}`;
+                document.getElementById('val-piso').innerText = `${obtenerPisoBase(portadoraSeleccionada.transponder).toFixed(1)} dBm`;
+                seleccionarPortadora(idSel);
             } else {
-                document.getElementById('val-frec').innerText = `-- MHz`;
-                document.getElementById('val-transponder').innerText = `--`;
+                indiceTrazaActual = -1;
+                actualizarControlesTiempo(null);
+            }
+        });
+
+        // Botón Anterior: retrocede en memoria o dispara carga automática del siguiente bloque histórico
+        document.getElementById('btn-prev').addEventListener('click', () => {
+            if (!portadoraSeleccionada || cargandoLote) return;
+            const portId = String(portadoraSeleccionada.id);
+            const cache = obtenerDesdeCache(portId);
+            if (!cache) return;
+
+            if (indiceTrazaActual > 0) {
+                indiceTrazaActual--;
+                renderizarTrazaActual();
+            } else if (cache.hayMas) {
+                // Llegamos al borde antiguo cargado -> pedir más trazas hacia atrás
+                solicitarLoteTrazas(portId, cache.items.length, true);
+            }
+        });
+
+        document.getElementById('btn-next').addEventListener('click', () => {
+            if (!portadoraSeleccionada || cargandoLote) return;
+            const portId = String(portadoraSeleccionada.id);
+            const cache = obtenerDesdeCache(portId);
+            if (!cache) return;
+
+            if (indiceTrazaActual < cache.items.length - 1) {
+                indiceTrazaActual++;
+                renderizarTrazaActual();
             }
         });
     }
 
+    function seleccionarPortadora(portId) {
+        const cache = obtenerDesdeCache(portId);
+        if (cache) {
+            indiceTrazaActual = cache.items.length - 1;
+            renderizarTrazaActual();
+            return;
+        }
+        solicitarLoteTrazas(portId, 0, false);
+    }
+
+    function solicitarLoteTrazas(portId, offset, esPaginacionHaciaAtras) {
+        cargandoLote = true;
+        const lblTs = document.getElementById('lbl-timestamp');
+        const btnPrev = document.getElementById('btn-prev');
+        const btnNext = document.getElementById('btn-next');
+
+        lblTs.innerText = esPaginacionHaciaAtras ? "Cargando más..." : "Descargando...";
+        btnPrev.disabled = true;
+        btnNext.disabled = true;
+
+        const url = `${URL_WEBAPP}?operacion=obtener_trazas_portadora&userId=${encodeURIComponent(userId)}&portadoraId=${encodeURIComponent(portId)}&offset=${offset}&limit=${TAMANO_LOTE}`;
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                cargandoLote = false;
+                if (!data.status || !Array.isArray(data.trazas)) {
+                    lblTs.innerText = "Error cargando";
+                    return;
+                }
+
+                // Almacenar en caché SIN descomprimir todavía (ahorro extremo de RAM)
+                const nuevosItems = data.trazas.map(item => ({
+                    timestamp: item.timestamp,
+                    trazaBase64: item.traza,
+                    puntos: null // Se descomprimirá al vuelo solo cuando se visualice
+                }));
+
+                const cacheExistente = obtenerDesdeCache(portId);
+                if (esPaginacionHaciaAtras && cacheExistente) {
+                    const cantidadAgregada = nuevosItems.length;
+                    const combinados = [...nuevosItems, ...cacheExistente.items];
+                    guardarEnCache(portId, {
+                        items: combinados,
+                        hayMas: Boolean(data.hayMas),
+                        totalDisponibles: data.totalDisponibles || combinados.length
+                    });
+                    // Posicionar en la traza inmediatamente anterior a la que estábamos viendo
+                    indiceTrazaActual = Math.max(0, cantidadAgregada - 1);
+                } else {
+                    guardarEnCache(portId, {
+                        items: nuevosItems,
+                        hayMas: Boolean(data.hayMas),
+                        totalDisponibles: data.totalDisponibles || nuevosItems.length
+                    });
+                    indiceTrazaActual = nuevosItems.length - 1;
+                }
+
+                // Verificar que el usuario no haya cambiado de portadora mientras cargaba
+                if (portadoraSeleccionada && String(portadoraSeleccionada.id) === portId) {
+                    renderizarTrazaActual();
+                }
+            })
+            .catch(err => {
+                cargandoLote = false;
+                console.error(err);
+                lblTs.innerText = "Error de red";
+            });
+    }
+
+    function descomprimirTraza(base64Str) {
+        try {
+            const binString = atob(base64Str);
+            const bytes = new Uint8Array(binString.length);
+            for (let i = 0; i < binString.length; i++) {
+                bytes[i] = binString.charCodeAt(i);
+            }
+            const decompressedData = pako.inflate(bytes, { to: 'string' });
+            const puntosEnteros = decompressedData.split(',').map(Number);
+            return puntosEnteros.map(val => -val / 100.0);
+        } catch (error) {
+            console.error("Error descomprimiendo traza:", error);
+            return Array(711).fill(-110);
+        }
+    }
+
+    function renderizarTrazaActual() {
+        if (!portadoraSeleccionada) return;
+        const portId = String(portadoraSeleccionada.id);
+        const cache = obtenerDesdeCache(portId);
+
+        actualizarControlesTiempo(cache);
+        if (!cache || indiceTrazaActual < 0 || !cache.items[indiceTrazaActual]) return;
+
+        const registro = cache.items[indiceTrazaActual];
+
+        // DESCOMPRESIÓN JUST-IN-TIME: Solo descomprime si esta traza aún no se ha abierto
+        if (!registro.puntos) {
+            registro.puntos = descomprimirTraza(registro.trazaBase64);
+        }
+        const puntos = registro.puntos;
+
+        const picoCentro = puntos[355] || -100;
+        const pisoBase = obtenerPisoBase(portadoraSeleccionada.transponder);
+        const deltaAprox = (picoCentro - pisoBase).toFixed(1);
+        document.getElementById('val-delta').innerText = `${picoCentro.toFixed(1)} dBm (Δ ${deltaAprox} dB)`;
+
+        const frecCentro = safeFloat(portadoraSeleccionada.frecuencia);
+        const span = safeFloat(configAnalizadorGlobal.FPH_SPAN_MHZ, 7.5);
+        const fMin = frecCentro - (span / 2.0);
+        const paso = span / 710.0;
+        const labelsMhz = Array.from({length: 711}, (_, i) => (fMin + i * paso).toFixed(2));
+
+        chartInstance.data.labels = labelsMhz;
+        chartInstance.data.datasets[0].data = puntos;
+        chartInstance.update();
+    }
+
+    function actualizarControlesTiempo(cache) {
+        const lblTs = document.getElementById('lbl-timestamp');
+        const lblCont = document.getElementById('lbl-contador');
+        const btnPrev = document.getElementById('btn-prev');
+        const btnNext = document.getElementById('btn-next');
+
+        if (!cache || cache.items.length === 0 || indiceTrazaActual < 0) {
+            lblTs.innerText = "Sin trazas guardadas";
+            lblCont.innerText = "0/0";
+            btnPrev.disabled = true;
+            btnNext.disabled = true;
+            return;
+        }
+
+        const cargadas = cache.items.length;
+        const total = cache.totalDisponibles || cargadas;
+        const posGlobal = (total - cargadas) + indiceTrazaActual + 1;
+
+        lblTs.innerText = cache.items[indiceTrazaActual].timestamp;
+        lblCont.innerText = `${posGlobal}/${total}`;
+
+        // Habilitar 'Anterior' si hay trazas previas en memoria O si existen más lotes antiguos en Sheets
+        btnPrev.disabled = (indiceTrazaActual <= 0 && !cache.hayMas);
+        btnNext.disabled = (indiceTrazaActual >= cargadas - 1);
+    }
+
     function initChart() {
         const ctx = document.getElementById('spectrumChart').getContext('2d');
-        const refLevel = parseFloat(String(configAnalizadorGlobal.FPH_REF_LEVEL_DBM || -50).replace(',', '.'));
-        const ampRes = parseFloat(String(configAnalizadorGlobal.FPH_AMP_RES || 50).replace(',', '.'));
+        const refLevel = safeFloat(configAnalizadorGlobal.FPH_REF_LEVEL_DBM, -50);
+        const ampRes = safeFloat(configAnalizadorGlobal.FPH_AMP_RES, 50);
 
         chartInstance = new Chart(ctx, {
             type: 'line',
@@ -295,17 +609,29 @@
                     fill: false
                 }]
             },
+            plugins: [fphOverlayPlugin],
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 animation: false,
                 scales: {
-                    x: { display: false },
+                    x: {
+                        grid: { color: '#262626' },
+                        ticks: {
+                            color: '#888',
+                            font: { size: 9 },
+                            maxTicksLimit: 11
+                        }
+                    },
                     y: {
                         min: refLevel - ampRes,
                         max: refLevel,
-                        grid: { color: '#222' },
-                        ticks: { color: '#666', font: { size: 10 } }
+                        grid: { color: '#262626' },
+                        ticks: {
+                            color: '#888',
+                            font: { size: 9 },
+                            stepSize: ampRes / 10
+                        }
                     }
                 },
                 plugins: { legend: { display: false } }
