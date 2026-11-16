@@ -3,12 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Monitoreo Espectral - Mini App</title>
-    <!-- SDK de Telegram Web App -->
+    <title>Monitoreo Espectral - FPH</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <!-- Librería Pako para descompresión Zlib -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
-    <!-- Chart.js para renderizar la traza espectral -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <style>
@@ -18,6 +15,7 @@
             --text-color: #e0e0e0;
             --accent-color: #00ff00;
             --border-color: #333333;
+            --error-color: #ff4d4d;
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -30,6 +28,9 @@
             max-width: 600px;
             margin: 0 auto;
         }
+        .view { display: none; }
+        .view.active { display: block; }
+
         header {
             display: flex;
             justify-content: space-between;
@@ -53,7 +54,7 @@
         label { display: block; font-size: 0.85rem; margin-bottom: 5px; color: #aaa; }
         select, button {
             width: 100%;
-            padding: 8px;
+            padding: 9px;
             background: #2a2a2a;
             color: #fff;
             border: 1px solid var(--border-color);
@@ -72,12 +73,13 @@
             background: #004400;
             border-color: #00aa00;
             cursor: pointer;
+            margin-bottom: 0;
         }
         .nav-time button:active { background: #006600; }
         
         .chart-container {
             position: relative;
-            height: 250px;
+            height: 260px;
             width: 100%;
             background: #000;
             border-radius: 6px;
@@ -98,88 +100,195 @@
         }
         .metric-title { color: #888; font-size: 0.75rem; }
         .metric-value { font-weight: bold; color: #fff; }
+        .status-box {
+            text-align: center;
+            padding: 40px 15px;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <header>
-        <div>
-            <h2>🛰️ Espectro FPH</h2>
-            <div id="user-info">Conectando con Telegram...</div>
-        </div>
-        <div id="connection-status" style="font-size: 0.75rem; color: #00ff00;">● Online</div>
-    </header>
-
-    <!-- Controles de Selección -->
-    <div class="card">
-        <label for="select-remota">Seleccionar Remota / Portadora:</label>
-        <select id="select-remota">
-            <option value="">-- Cargando portadoras desde Sheets --</option>
-        </select>
-
-        <label>Navegación Histórica en el Tiempo:</label>
-        <div class="nav-time">
-            <button id="btn-prev">◀ Anterior</button>
-            <span id="lbl-timestamp" style="font-size: 0.8rem; text-align: center; flex: 1;">--/-- --:--</span>
-            <button id="btn-next">Siguiente ▶</button>
+    
+    <!-- VISTA 1: VERIFICACIÓN DE SEGURIDAD -->
+    <div id="viewVerificando" class="view active">
+        <div class="card status-box">
+            <div style="font-size: 2.5rem; margin-bottom: 12px;">🛰️</div>
+            <h2 style="margin-bottom: 8px;">Verificando Credenciales</h2>
+            <p id="txt-estado-auth" style="font-size: 0.85rem; color: #aaa;">
+                Validando acceso en plataforma SCPC...
+            </p>
         </div>
     </div>
 
-    <!-- Panel de Gráfica Estilo FPH -->
-    <div class="card">
-        <div class="chart-container">
-            <canvas id="spectrumChart"></canvas>
+    <!-- VISTA 2: INTERFAZ PRINCIPAL DEL ANALIZADOR -->
+    <div id="viewPrincipal" class="view">
+        <header>
+            <div>
+                <h2>🛰️ Espectro FPH</h2>
+                <div id="user-info">Operador: --</div>
+            </div>
+            <div id="connection-status" style="font-size: 0.75rem; color: #00ff00;">● Autorizado</div>
+        </header>
+
+        <!-- Controles de Selección -->
+        <div class="card">
+            <label for="select-remota">Seleccionar Remota / Portadora:</label>
+            <select id="select-remota">
+                <option value="">-- Seleccione una portadora --</option>
+            </select>
+
+            <label>Navegación Histórica en el Tiempo:</label>
+            <div class="nav-time">
+                <button id="btn-prev">◀ Anterior</button>
+                <span id="lbl-timestamp" style="font-size: 0.8rem; text-align: center; flex: 1;">--/-- --:--</span>
+                <button id="btn-next">Siguiente ▶</button>
+            </div>
         </div>
-        <div class="metrics-grid">
-            <div class="metric-box">
-                <div class="metric-title">ESTADO</div>
-                <div class="metric-value" id="val-estado">--</div>
+
+        <!-- Panel de Gráfica Estilo FPH -->
+        <div class="card">
+            <div class="chart-container">
+                <canvas id="spectrumChart"></canvas>
             </div>
-            <div class="metric-box" style="border-left-color: #ff00ff;">
-                <div class="metric-title">POTENCIA PROMEDIO</div>
-                <div class="metric-value" id="val-potencia">-- dBm</div>
-            </div>
-            <div class="metric-box" style="border-left-color: #00ffff;">
-                <div class="metric-title">DELTA / RIPPLE</div>
-                <div class="metric-value" id="val-delta">-- dB</div>
-            </div>
-            <div class="metric-box" style="border-left-color: #ff3333;">
-                <div class="metric-title">PISO DE RUIDO</div>
-                <div class="metric-value" id="val-piso">-- dBm</div>
+            <div class="metrics-grid">
+                <div class="metric-box">
+                    <div class="metric-title">FRECUENCIA / BW</div>
+                    <div class="metric-value" id="val-frec">-- MHz</div>
+                </div>
+                <div class="metric-box" style="border-left-color: #ff00ff;">
+                    <div class="metric-title">TRANSPONDER</div>
+                    <div class="metric-value" id="val-transponder">--</div>
+                </div>
+                <div class="metric-box" style="border-left-color: #00ffff;">
+                    <div class="metric-title">POTENCIA / DELTA</div>
+                    <div class="metric-value" id="val-delta">-- dB</div>
+                </div>
+                <div class="metric-box" style="border-left-color: #ff3333;">
+                    <div class="metric-title">PISO CALIBRADO</div>
+                    <div class="metric-value" id="val-piso">-- dBm</div>
+                </div>
             </div>
         </div>
     </div>
+
 </div>
 
 <script>
-    // Inicializar Telegram Web App
-    const tg = window.Telegram.WebApp;
-    tg.expand();
+    const URL_WEBAPP = "https://script.google.com/macros/s/AKfycbxLuOURWX0-EjkTItoLh5upIPL0BVDwdZ6FWdX-BuvUzyluJNe9hficn6KK75m-8e0s/exec";
+    
+    const tg = window.Telegram ? window.Telegram.WebApp : null;
+    if (tg) {
+        tg.expand();
+        tg.ready();
+    }
 
-    // Validar usuario al cargar
-    window.addEventListener('DOMContentLoaded', () => {
-        const user = tg.initDataUnsafe?.user;
-        if (user) {
-            document.getElementById('user-info').innerText = `Supervisor: ${user.first_name} (@${user.username || 'N/A'})`;
-        } else {
-            document.getElementById('user-info').innerText = `Modo Prueba / Web Externa`;
+    // Obtener ID y nombre de Telegram (con respaldo por parámetro URL para pruebas)
+    const paramsUrl = new URLSearchParams(window.location.search);
+    let userId = paramsUrl.get("userId") || "";
+    let userName = "Operador";
+
+    if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
+        if (!userId && tg.initDataUnsafe.user.id) {
+            userId = tg.initDataUnsafe.user.id.toString();
         }
-        
-        initChart();
+        if (tg.initDataUnsafe.user.first_name) {
+            userName = tg.initDataUnsafe.user.first_name;
+        }
+    }
+
+    let listaPortadorasGlobal = [];
+    let configAnalizadorGlobal = {};
+    let chartInstance = null;
+
+    function mostrarVista(idVista) {
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        document.getElementById(idVista).classList.add('active');
+    }
+
+    function mostrarAccesoDenegado(motivo) {
+        const box = document.querySelector('#viewVerificando .status-box');
+        box.innerHTML = `
+            <div style="font-size: 2.5rem; margin-bottom: 12px;">⛔</div>
+            <h2 style="color: var(--error-color); margin-bottom: 8px;">Acceso Denegado</h2>
+            <p style="font-size: 0.85rem; color: #aaa; line-height: 1.5;">
+                ${motivo || "Tu ID de Telegram no está autorizado en la configuración del sistema."}
+            </p>
+        `;
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        if (!userId) {
+            mostrarAccesoDenegado("No se detectó una sesión válida de Telegram.");
+            return;
+        }
+
+        fetch(`${URL_WEBAPP}?operacion=init_miniapp&userId=${encodeURIComponent(userId)}`)
+            .then(res => {
+                if (!res.ok) throw new Error("Error HTTP " + res.status);
+                return res.json();
+            })
+            .then(data => {
+                if (!data.status || data.autorizado === false) {
+                    mostrarAccesoDenegado("No posees privilegios para acceder al monitoreo espectral.");
+                    return;
+                }
+
+                // Usuario autorizado: cargar datos en memoria y poblar selector
+                listaPortadorasGlobal = data.portadoras || [];
+                configAnalizadorGlobal = data.config || {};
+
+                document.getElementById('user-info').innerText = `Operador: ${userName} (ID: ${userId})`;
+                poblarSelectorPortadoras(listaPortadorasGlobal);
+                initChart();
+                mostrarVista('viewPrincipal');
+            })
+            .catch(err => {
+                mostrarAccesoDenegado("Error de conexión con el servidor: " + err.message);
+            });
     });
 
-    let chartInstance = null;
+    function poblarSelectorPortadoras(portadoras) {
+        const select = document.getElementById('select-remota');
+        select.innerHTML = '<option value="">-- Seleccione una portadora (' + portadoras.length + ') --</option>';
+        
+        // Ordenar alfabéticamente por nombre de estación
+        const ordenadas = [...portadoras].sort((a, b) => 
+            String(a.estacion).localeCompare(String(b.estacion))
+        );
+
+        ordenadas.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.innerText = `${p.estacion} (${p.frecuencia} MHz - ${p.polarizacion})`;
+            select.appendChild(opt);
+        });
+
+        select.addEventListener('change', function() {
+            const idSel = this.value;
+            const port = listaPortadorasGlobal.find(item => String(item.id) === String(idSel));
+            if (port) {
+                document.getElementById('val-frec').innerText = `${port.frecuencia} MHz / ${port.bandwidth} MHz`;
+                document.getElementById('val-transponder').innerText = `${port.transponder}`;
+            } else {
+                document.getElementById('val-frec').innerText = `-- MHz`;
+                document.getElementById('val-transponder').innerText = `--`;
+            }
+        });
+    }
 
     function initChart() {
         const ctx = document.getElementById('spectrumChart').getContext('2d');
+        const refLevel = parseFloat(String(configAnalizadorGlobal.FPH_REF_LEVEL_DBM || -50).replace(',', '.'));
+        const ampRes = parseFloat(String(configAnalizadorGlobal.FPH_AMP_RES || 50).replace(',', '.'));
+
         chartInstance = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: Array.from({length: 711}, (_, i) => i), // 711 puntos del FPH
+                labels: Array.from({length: 711}, (_, i) => i),
                 datasets: [{
                     label: 'Traza Espectral',
-                    data: Array(711).fill(-120),
+                    data: Array(711).fill(refLevel - ampRes),
                     borderColor: '#00FF00',
                     borderWidth: 1.5,
                     pointRadius: 0,
@@ -189,11 +298,12 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                animation: false,
                 scales: {
-                    x: { display: false }, // Ocultar eje X numérico, simula analizador
+                    x: { display: false },
                     y: {
-                        min: -110,
-                        max: -50,
+                        min: refLevel - ampRes,
+                        max: refLevel,
                         grid: { color: '#222' },
                         ticks: { color: '#666', font: { size: 10 } }
                     }
@@ -201,25 +311,6 @@
                 plugins: { legend: { display: false } }
             }
         });
-    }
-
-    // Función auxiliar para descomprimir trazas base64 con Pako (Zlib)
-    function descomprimirTraza(base64Str) {
-        try {
-            const binString = atob(base64Str);
-            const len = binString.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-                bytes[i] = binString.charCodeAt(i);
-            }
-            const decompressedData = pako.inflate(bytes, { to: 'string' });
-            const puntosEnteros = decompressedData.split(',').map(Number);
-            // Revertir cuantización (-val / 100.0)
-            return puntosEnteros.map(val => -val / 100.0);
-        } catch (error) {
-            console.error("Error al descomprimir traza:", error);
-            return Array(711).fill(-120);
-        }
     }
 </script>
 
