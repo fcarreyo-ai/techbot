@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Monitoreo Espectral - FPH</title>
+    <title>RSAM</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -52,7 +52,7 @@
             margin-bottom: 10px;
         }
         label { display: block; font-size: 0.82rem; margin-bottom: 5px; color: #aaa; }
-        select, button {
+        button {
             width: 100%;
             padding: 9px;
             background: #2a2a2a;
@@ -63,6 +63,92 @@
             box-sizing: border-box;
             margin-bottom: 8px;
         }
+
+        /* Estilos del Buscador Desplegable Dinámico */
+        .combobox-wrapper {
+            position: relative;
+            margin-bottom: 10px;
+        }
+        .combobox-input-box {
+            display: flex;
+            align-items: center;
+            background: #2a2a2a;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding-right: 6px;
+        }
+        .combobox-input-box:focus-within {
+            border-color: var(--accent-color);
+        }
+        #input-buscar-remota {
+            width: 100%;
+            padding: 9px 10px;
+            background: transparent;
+            color: #fff;
+            border: none;
+            font-size: 0.88rem;
+            outline: none;
+            box-sizing: border-box;
+        }
+        #btn-limpiar-busqueda {
+            width: auto;
+            margin: 0;
+            padding: 4px 8px;
+            background: transparent;
+            border: none;
+            color: #888;
+            font-size: 0.9rem;
+            cursor: pointer;
+            display: none;
+        }
+        #btn-limpiar-busqueda:hover { color: #fff; }
+        
+        .dropdown-lista {
+            display: none;
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            max-height: 240px;
+            overflow-y: auto;
+            background: #252525;
+            border: 1px solid #444;
+            border-radius: 6px;
+            z-index: 1000;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.75);
+        }
+        .dropdown-lista.open { display: block; }
+        .dropdown-item {
+            padding: 9px 12px;
+            border-bottom: 1px solid #303030;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+        }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover, .dropdown-item.selected {
+            background: #003300;
+        }
+        .item-nombre {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #fff;
+        }
+        .item-meta {
+            font-size: 0.75rem;
+            color: #00ff00;
+            font-family: monospace;
+            white-space: nowrap;
+        }
+        .dropdown-vacio {
+            padding: 12px;
+            text-align: center;
+            color: #888;
+            font-size: 0.82rem;
+        }
+
         .nav-time {
             display: flex;
             gap: 8px;
@@ -123,7 +209,7 @@
             <div style="font-size: 2.5rem; margin-bottom: 12px;">🛰️</div>
             <h2 style="margin-bottom: 8px;">Verificando Credenciales</h2>
             <p id="txt-estado-auth" style="font-size: 0.85rem; color: #aaa;">
-                Validando acceso en plataforma SCPC...
+                Validando acceso...
             </p>
         </div>
     </div>
@@ -132,18 +218,22 @@
     <div id="viewPrincipal" class="view">
         <header>
             <div>
-                <h2>🛰️ Analizador Espectral FPH - v1.0.2</h2>
+                <h2>🛰️ Registro de Portadoras - v1.1.0</h2>
                 <div id="user-info">Operador: --</div>
             </div>
             <div id="connection-status" style="font-size: 0.75rem; color: #00ff00;">● En línea</div>
         </header>
 
-        <!-- Controles de Selección -->
+        <!-- Controles de Selección con Filtro Dinámico -->
         <div class="card">
-            <label for="select-remota">Seleccionar Remota / Portadora:</label>
-            <select id="select-remota">
-                <option value="">-- Seleccione una portadora --</option>
-            </select>
+            <label for="input-buscar-remota">Buscar Remota (Nombre, Transponder o MHz):</label>
+            <div class="combobox-wrapper" id="combobox-remota">
+                <div class="combobox-input-box">
+                    <input type="text" id="input-buscar-remota" placeholder="Escriba para filtrar o toque para ver todas..." autocomplete="off">
+                    <button type="button" id="btn-limpiar-busqueda" title="Limpiar filtro">✕</button>
+                </div>
+                <div class="dropdown-lista" id="lista-remotas-dropdown"></div>
+            </div>
 
             <label>Navegación Histórica (<span id="lbl-contador">0/0</span>):</label>
             <div class="nav-time">
@@ -184,7 +274,7 @@
 <script>
     const URL_WEBAPP = "https://script.google.com/macros/s/AKfycbxLuOURWX0-EjkTItoLh5upIPL0BVDwdZ6FWdX-BuvUzyluJNe9hficn6KK75m-8e0s/exec";
     const TAMANO_LOTE = 30;
-    const MAX_ESTACIONES_CACHE = 10; // Límite LRU de estaciones en memoria RAM
+    const MAX_ESTACIONES_CACHE = 10;
     
     const tg = window.Telegram ? window.Telegram.WebApp : null;
     if (tg) {
@@ -206,10 +296,8 @@
     }
 
     let listaPortadorasGlobal = [];
+    let portadorasOrdenadasGlobal = [];
     let configAnalizadorGlobal = {};
-    
-    // Caché LRU: Map conserva el orden de inserción para expulsar la estación más antigua si supera 10
-    // Estructura valor: { items: [{timestamp, trazaBase64, puntosDescomprimidos?}], hayMas: bool, totalDisponibles: num }
     const cacheLRU = new Map();
 
     let portadoraSeleccionada = null;
@@ -226,7 +314,6 @@
     function obtenerDesdeCache(portId) {
         if (!cacheLRU.has(portId)) return null;
         const entrada = cacheLRU.get(portId);
-        // Refrescar prioridad LRU (mover al final del Map)
         cacheLRU.delete(portId);
         cacheLRU.set(portId, entrada);
         return entrada;
@@ -236,7 +323,6 @@
         if (cacheLRU.has(portId)) {
             cacheLRU.delete(portId);
         } else if (cacheLRU.size >= MAX_ESTACIONES_CACHE) {
-            // Eliminar la estación más antigua (primera clave del Map)
             const claveMasAntigua = cacheLRU.keys().next().value;
             cacheLRU.delete(claveMasAntigua);
         }
@@ -259,7 +345,6 @@
         `;
     }
 
-    // Plugin personalizado para dibujar marcas RF y etiquetas verticales estilo R&S FPH
     const fphOverlayPlugin = {
         id: 'fphOverlay',
         afterDatasetsDraw(chart) {
@@ -281,7 +366,6 @@
 
             ctx.save();
 
-            // 1. Línea vertical frecuencia central teórica
             const xCentro = freqToPixelX(frecCentro);
             ctx.strokeStyle = '#0088FF';
             ctx.lineWidth = 1.3;
@@ -291,7 +375,6 @@
             ctx.lineTo(xCentro, bottom);
             ctx.stroke();
 
-            // 2. Límites de BW asignado
             const xBwIzq = freqToPixelX(frecCentro - bw / 2.0);
             const xBwDer = freqToPixelX(frecCentro + bw / 2.0);
             ctx.strokeStyle = '#666666';
@@ -306,7 +389,6 @@
                 }
             });
 
-            // 3. Línea horizontal de Piso de Ruido Base
             const pisoBase = obtenerPisoBase(portadoraSeleccionada.transponder);
             const yPiso = y.getPixelForValue(pisoBase);
             if (yPiso >= top && yPiso <= bottom) {
@@ -319,7 +401,6 @@
                 ctx.stroke();
             }
 
-            // 4. Etiquetas verticales de portadoras visibles dentro del SPAN
             ctx.setLineDash([]);
             const datosTraza = chart.data.datasets[0].data;
             const vecinas = listaPortadorasGlobal.filter(p => {
@@ -378,8 +459,17 @@
                 listaPortadorasGlobal = data.portadoras || [];
                 configAnalizadorGlobal = data.config || {};
 
+                // Ordenar por Transponder (orden natural) y luego por Frecuencia numérica ascendente
+                portadorasOrdenadasGlobal = [...listaPortadorasGlobal].sort((a, b) => {
+                    const tpA = String(a.transponder || "").trim();
+                    const tpB = String(b.transponder || "").trim();
+                    const compTp = tpA.localeCompare(tpB, undefined, { numeric: true, sensitivity: 'base' });
+                    if (compTp !== 0) return compTp;
+                    return safeFloat(a.frecuencia) - safeFloat(b.frecuencia);
+                });
+
                 document.getElementById('user-info').innerText = `Operador: ${userName}`;
-                poblarSelectorPortadoras(listaPortadorasGlobal);
+                inicializarBuscadorRemotas();
                 initChart();
                 mostrarVista('viewPrincipal');
             })
@@ -388,37 +478,100 @@
             });
     });
 
-    function poblarSelectorPortadoras(portadoras) {
-        const select = document.getElementById('select-remota');
-        select.innerHTML = '<option value="">-- Seleccione una portadora (' + portadoras.length + ') --</option>';
-        
-        const ordenadas = [...portadoras].sort((a, b) => 
-            String(a.estacion).localeCompare(String(b.estacion))
-        );
+    function inicializarBuscadorRemotas() {
+        const inputBuscar = document.getElementById('input-buscar-remota');
+        const btnLimpiar = document.getElementById('btn-limpiar-busqueda');
+        const dropdown = document.getElementById('lista-remotas-dropdown');
+        const wrapper = document.getElementById('combobox-remota');
 
-        ordenadas.forEach(p => {
-            const opt = document.createElement('option');
-            opt.value = p.id;
-            opt.innerText = `${p.estacion} (${p.frecuencia} MHz - ${p.polarizacion})`;
-            select.appendChild(opt);
+        inputBuscar.placeholder = `Buscar entre ${portadorasOrdenadasGlobal.length} portadoras...`;
+
+        const renderizarOpciones = (filtroTexto = "") => {
+            const termino = filtroTexto.trim().toLowerCase();
+            dropdown.innerHTML = "";
+
+            const filtradas = portadorasOrdenadasGlobal.filter(p => {
+                if (!termino) return true;
+                const nombre = String(p.estacion || "").toLowerCase();
+                const tp = String(p.transponder || "").toLowerCase();
+                const frec = String(p.frecuencia || "").toLowerCase();
+                return nombre.includes(termino) || tp.includes(termino) || frec.includes(termino);
+            });
+
+            if (filtradas.length === 0) {
+                dropdown.innerHTML = '<div class="dropdown-vacio">No se encontraron portadoras coincidentes</div>';
+                return;
+            }
+
+            filtradas.forEach(p => {
+                const div = document.createElement('div');
+                div.className = 'dropdown-item';
+                if (portadoraSeleccionada && String(portadoraSeleccionada.id) === String(p.id)) {
+                    div.classList.add('selected');
+                }
+
+                div.innerHTML = `
+                    <span class="item-nombre">${p.estacion}</span>
+                    <span class="item-meta">[${p.transponder}] ${p.frecuencia} MHz</span>
+                `;
+
+                div.addEventListener('click', () => {
+                    elegirPortadora(p);
+                    dropdown.classList.remove('open');
+                });
+
+                dropdown.appendChild(div);
+            });
+        };
+
+        const elegirPortadora = (portadora) => {
+            portadoraSeleccionada = portadora;
+            const idSel = String(portadora.id);
+            inputBuscar.value = `${portadora.estacion} [${portadora.transponder}] - ${portadora.frecuencia} MHz`;
+            btnLimpiar.style.display = 'block';
+
+            document.getElementById('val-frec').innerText = `${portadora.frecuencia} MHz / ${portadora.bandwidth} MHz`;
+            document.getElementById('val-transponder').innerText = `${portadora.transponder}`;
+            document.getElementById('val-piso').innerText = `${obtenerPisoBase(portadora.transponder).toFixed(1)} dBm`;
+
+            seleccionarPortadora(idSel);
+        };
+
+        // Al enfocar o hacer clic en el campo, mostrar el listado completo (si tiene una seleccionada, muestra todas igual para permitir cambiar rápido)
+        inputBuscar.addEventListener('focus', () => {
+            inputBuscar.select();
+            renderizarOpciones("");
+            dropdown.classList.add('open');
         });
 
-        select.addEventListener('change', function() {
-            const idSel = String(this.value);
-            portadoraSeleccionada = listaPortadorasGlobal.find(item => String(item.id) === idSel) || null;
-            
-            if (portadoraSeleccionada) {
-                document.getElementById('val-frec').innerText = `${portadoraSeleccionada.frecuencia} MHz / ${portadoraSeleccionada.bandwidth} MHz`;
-                document.getElementById('val-transponder').innerText = `${portadoraSeleccionada.transponder}`;
-                document.getElementById('val-piso').innerText = `${obtenerPisoBase(portadoraSeleccionada.transponder).toFixed(1)} dBm`;
-                seleccionarPortadora(idSel);
-            } else {
-                indiceTrazaActual = -1;
-                actualizarControlesTiempo(null);
+        inputBuscar.addEventListener('input', () => {
+            const val = inputBuscar.value;
+            btnLimpiar.style.display = val.length > 0 ? 'block' : 'none';
+            renderizarOpciones(val);
+            dropdown.classList.add('open');
+        });
+
+        btnLimpiar.addEventListener('click', () => {
+            inputBuscar.value = "";
+            btnLimpiar.style.display = 'none';
+            renderizarOpciones("");
+            dropdown.classList.add('open');
+            inputBuscar.focus();
+        });
+
+        // Cerrar el desplegable si se toca fuera del componente
+        document.addEventListener('click', (e) => {
+            if (!wrapper.contains(e.target)) {
+                dropdown.classList.remove('open');
+                // Si el usuario dejó el texto vacío o a medias sin elegir, restaurar el nombre de la portadora activa
+                if (portadoraSeleccionada) {
+                    inputBuscar.value = `${portadoraSeleccionada.estacion} [${portadoraSeleccionada.transponder}] - ${portadoraSeleccionada.frecuencia} MHz`;
+                    btnLimpiar.style.display = 'block';
+                }
             }
         });
 
-        // Botón Anterior: retrocede en memoria o dispara carga automática del siguiente bloque histórico
+        // Navegación histórica
         document.getElementById('btn-prev').addEventListener('click', () => {
             if (!portadoraSeleccionada || cargandoLote) return;
             const portId = String(portadoraSeleccionada.id);
@@ -429,7 +582,6 @@
                 indiceTrazaActual--;
                 renderizarTrazaActual();
             } else if (cache.hayMas) {
-                // Llegamos al borde antiguo cargado -> pedir más trazas hacia atrás
                 solicitarLoteTrazas(portId, cache.items.length, true);
             }
         });
@@ -474,15 +626,14 @@
             .then(data => {
                 cargandoLote = false;
                 if (!data.status || !Array.isArray(data.trazas)) {
-                    lblTs.innerText = "Error cargando";
+                    lblTs.innerText = data.error ? `Err: ${data.error}` : "Error cargando";
                     return;
                 }
 
-                // Almacenar en caché SIN descomprimir todavía (ahorro extremo de RAM)
                 const nuevosItems = data.trazas.map(item => ({
                     timestamp: item.timestamp,
                     trazaBase64: item.traza,
-                    puntos: null // Se descomprimirá al vuelo solo cuando se visualice
+                    puntos: null
                 }));
 
                 const cacheExistente = obtenerDesdeCache(portId);
@@ -494,7 +645,6 @@
                         hayMas: Boolean(data.hayMas),
                         totalDisponibles: data.totalDisponibles || combinados.length
                     });
-                    // Posicionar en la traza inmediatamente anterior a la que estábamos viendo
                     indiceTrazaActual = Math.max(0, cantidadAgregada - 1);
                 } else {
                     guardarEnCache(portId, {
@@ -505,7 +655,6 @@
                     indiceTrazaActual = nuevosItems.length - 1;
                 }
 
-                // Verificar que el usuario no haya cambiado de portadora mientras cargaba
                 if (portadoraSeleccionada && String(portadoraSeleccionada.id) === portId) {
                     renderizarTrazaActual();
                 }
@@ -543,7 +692,6 @@
 
         const registro = cache.items[indiceTrazaActual];
 
-        // DESCOMPRESIÓN JUST-IN-TIME: Solo descomprime si esta traza aún no se ha abierto
         if (!registro.puntos) {
             registro.puntos = descomprimirTraza(registro.trazaBase64);
         }
@@ -586,7 +734,6 @@
         lblTs.innerText = cache.items[indiceTrazaActual].timestamp;
         lblCont.innerText = `${posGlobal}/${total}`;
 
-        // Habilitar 'Anterior' si hay trazas previas en memoria O si existen más lotes antiguos en Sheets
         btnPrev.disabled = (indiceTrazaActual <= 0 && !cache.hayMas);
         btnNext.disabled = (indiceTrazaActual >= cargadas - 1);
     }
