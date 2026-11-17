@@ -190,6 +190,7 @@
             padding: 8px;
             border-radius: 6px;
             border-left: 3px solid var(--accent-color);
+            transition: border-color 0.2s ease;
         }
         .metric-title { color: #888; font-size: 0.72rem; }
         .metric-value { font-weight: bold; color: #fff; margin-top: 2px; }
@@ -218,7 +219,7 @@
     <div id="viewPrincipal" class="view">
         <header>
             <div>
-                <h2>🛰️ Registro de Portadoras - v1.1.0</h2>
+                <h2>🛰️ Registro de Portadoras - v1.1.2</h2>
                 <div id="user-info">Operador: --</div>
             </div>
             <div id="connection-status" style="font-size: 0.75rem; color: #00ff00;">● En línea</div>
@@ -257,12 +258,12 @@
                     <div class="metric-title">TRANSPONDER</div>
                     <div class="metric-value" id="val-transponder">--</div>
                 </div>
-                <div class="metric-box" style="border-left-color: #00ffff;">
-                    <div class="metric-title">NIVEL PICO / DELTA</div>
+                <div class="metric-box" id="box-nivel-delta" style="border-left-color: #00ffff;">
+                    <div class="metric-title">NIVEL / STATUS</div>
                     <div class="metric-value" id="val-delta">-- dB</div>
                 </div>
                 <div class="metric-box" style="border-left-color: #ff3333;">
-                    <div class="metric-title">PISO BASE TRANSPONDER</div>
+                    <div class="metric-title">PISO TRANSPONDER</div>
                     <div class="metric-value" id="val-piso">-- dBm</div>
                 </div>
             </div>
@@ -439,6 +440,86 @@
         return safeFloat(configAnalizadorGlobal[clave], -90.0);
     }
 
+    /**
+     * Calcula el nivel promedio en el 60% útil centrado en el centroide espectral,
+     * y evalúa presencia (FPH_MIN_LEV) y deformación de cresta (FPH_UMBRAL_RIPPLE).
+     */
+    function calcularMetricasPortadora(puntos, portadora) {
+        const bwTeorico = safeFloat(portadora.bandwidth, 1.0);
+        const spanOperacion = safeFloat(configAnalizadorGlobal.FPH_SPAN_MHZ, 7.5);
+        const fphMinLev = safeFloat(configAnalizadorGlobal.FPH_MIN_LEV, 4.0);
+        const fphUmbralRipple = safeFloat(configAnalizadorGlobal.FPH_UMBRAL_RIPPLE, 4.0);
+
+        const hzPerPoint = spanOperacion / 710.0;
+        const idxCentroTeorico = 355;
+        const pisoRuido = obtenerPisoBase(portadora.transponder);
+
+        const pTeorica = puntos[idxCentroTeorico] !== undefined ? puntos[idxCentroTeorico] : -100.0;
+        const deltaPresencia = pTeorica - pisoRuido;
+
+        const k60 = Math.round(((bwTeorico * 0.6) / 2.0) / hzPerPoint);
+
+        // 1. Condición No Detectada / Caída
+        if (deltaPresencia < fphMinLev) {
+            const idxStart = Math.max(0, idxCentroTeorico - k60);
+            const idxEnd = Math.min(710, idxCentroTeorico + k60);
+            const segmento = puntos.slice(idxStart, idxEnd + 1);
+            const promedio = segmento.reduce((acc, v) => acc + v, 0) / segmento.length;
+            return {
+                promedioDbm: promedio,
+                estado: "CAIDA",
+                textoDetalle: "🔴 No detectada"
+            };
+        }
+
+        // 2. Ventana de búsqueda de centroide (±BW/2)
+        const halfBwPoints = Math.round((bwTeorico / 2.0) / hzPerPoint);
+        const wStart = Math.max(0, idxCentroTeorico - halfBwPoints);
+        const wEnd = Math.min(710, idxCentroTeorico + halfBwPoints);
+
+        // 3. Suavizado por media móvil de 3 puntos
+        const smoothed = [...puntos];
+        for (let sIdx = 1; sIdx < 710; sIdx++) {
+            smoothed[sIdx] = (puntos[sIdx - 1] + puntos[sIdx] + puntos[sIdx + 1]) / 3.0;
+        }
+
+        // 4. Centroide por masa espectral en potencia lineal
+        let num = 0.0;
+        let den = 0.0;
+        for (let idx = wStart; idx <= wEnd; idx++) {
+            const pLin = Math.pow(10.0, smoothed[idx] / 10.0);
+            num += idx * pLin;
+            den += pLin;
+        }
+
+        let idxCentroReal = den > 0 ? Math.round(num / den) : idxCentroTeorico;
+        idxCentroReal = Math.max(wStart, Math.min(wEnd, idxCentroReal));
+
+        // 5. Nivel promedio en el 60% del BW útil centrado en idxCentroReal
+        const idxStart = Math.max(0, idxCentroReal - k60);
+        const idxEnd = Math.min(710, idxCentroReal + k60);
+        const segmento = puntos.slice(idxStart, idxEnd + 1);
+
+        const potenciaPromedioDbm = segmento.reduce((acc, v) => acc + v, 0) / segmento.length;
+        const deltaDb = Math.abs(potenciaPromedioDbm - pisoRuido);
+        const rippleDetectado = Math.max(...segmento) - Math.min(...segmento);
+
+        // 6. Alerta por deformación de cresta (Ripple)
+        if (rippleDetectado > fphUmbralRipple) {
+            return {
+                promedioDbm: potenciaPromedioDbm,
+                estado: "RIPPLE",
+                textoDetalle: `⚠️ Deformada (R: ${rippleDetectado.toFixed(2)} dB)`
+            };
+        }
+
+        return {
+            promedioDbm: potenciaPromedioDbm,
+            estado: "OK",
+            textoDetalle: `Δ ${deltaDb.toFixed(2)} dB`
+        };
+    }
+
     window.addEventListener('DOMContentLoaded', () => {
         if (!userId) {
             mostrarAccesoDenegado("No se detectó una sesión válida de Telegram.");
@@ -459,7 +540,6 @@
                 listaPortadorasGlobal = data.portadoras || [];
                 configAnalizadorGlobal = data.config || {};
 
-                // Ordenar por Transponder (orden natural) y luego por Frecuencia numérica ascendente
                 portadorasOrdenadasGlobal = [...listaPortadorasGlobal].sort((a, b) => {
                     const tpA = String(a.transponder || "").trim();
                     const tpB = String(b.transponder || "").trim();
@@ -537,7 +617,6 @@
             seleccionarPortadora(idSel);
         };
 
-        // Al enfocar o hacer clic en el campo, mostrar el listado completo (si tiene una seleccionada, muestra todas igual para permitir cambiar rápido)
         inputBuscar.addEventListener('focus', () => {
             inputBuscar.select();
             renderizarOpciones("");
@@ -559,11 +638,9 @@
             inputBuscar.focus();
         });
 
-        // Cerrar el desplegable si se toca fuera del componente
         document.addEventListener('click', (e) => {
             if (!wrapper.contains(e.target)) {
                 dropdown.classList.remove('open');
-                // Si el usuario dejó el texto vacío o a medias sin elegir, restaurar el nombre de la portadora activa
                 if (portadoraSeleccionada) {
                     inputBuscar.value = `${portadoraSeleccionada.estacion} [${portadoraSeleccionada.transponder}] - ${portadoraSeleccionada.frecuencia} MHz`;
                     btnLimpiar.style.display = 'block';
@@ -571,7 +648,6 @@
             }
         });
 
-        // Navegación histórica
         document.getElementById('btn-prev').addEventListener('click', () => {
             if (!portadoraSeleccionada || cargandoLote) return;
             const portId = String(portadoraSeleccionada.id);
@@ -697,10 +773,23 @@
         }
         const puntos = registro.puntos;
 
-        const picoCentro = puntos[355] || -100;
-        const pisoBase = obtenerPisoBase(portadoraSeleccionada.transponder);
-        const deltaAprox = (picoCentro - pisoBase).toFixed(1);
-        document.getElementById('val-delta').innerText = `${picoCentro.toFixed(1)} dBm (Δ ${deltaAprox} dB)`;
+        // Calcular nivel promedio y estado de salud de la portadora
+        const metricas = calcularMetricasPortadora(puntos, portadoraSeleccionada);
+        const boxDelta = document.getElementById('box-nivel-delta');
+        const valDelta = document.getElementById('val-delta');
+
+        valDelta.innerText = `${metricas.promedioDbm.toFixed(2)} dBm (${metricas.textoDetalle})`;
+
+        if (metricas.estado === "CAIDA") {
+            boxDelta.style.borderLeftColor = "#ff4d4d";
+            valDelta.style.color = "#ff8a8a";
+        } else if (metricas.estado === "RIPPLE") {
+            boxDelta.style.borderLeftColor = "#ffaa00";
+            valDelta.style.color = "#ffd166";
+        } else {
+            boxDelta.style.borderLeftColor = "#00ffff";
+            valDelta.style.color = "#ffffff";
+        }
 
         const frecCentro = safeFloat(portadoraSeleccionada.frecuencia);
         const span = safeFloat(configAnalizadorGlobal.FPH_SPAN_MHZ, 7.5);
