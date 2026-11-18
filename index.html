@@ -42,10 +42,10 @@
             margin-bottom: 10px;
         }
         h2 { margin: 0; font-size: 1.05rem; color: #fff; }
-        #user-info { font-size: 0.78rem; color: #888; }
-		#user-info-menu { font-size: 0.78rem; color: #888; }
-		
-		#vinfo { font-size: 0.78rem; color: #888; }
+        #user-info, #user-info-menu, #user-info-remotas, #vinfo {
+            font-size: 0.78rem;
+            color: #888;
+        }
         
         .card {
             background: var(--card-bg);
@@ -68,9 +68,13 @@
             cursor: pointer;
             font-weight: 500;
         }
-        button:hover {
+        button:hover:not(:disabled) {
             background: #333;
             border-color: var(--accent-color);
+        }
+        button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
         }
 
         /* Botones del Menú Principal */
@@ -95,6 +99,17 @@
             color: #ccc;
             margin-bottom: 10px;
         }
+        .btn-accion-vivo {
+            background: #004400;
+            border-color: #00aa00;
+            color: #fff;
+            font-weight: 600;
+            margin-top: 4px;
+            margin-bottom: 0;
+        }
+        .btn-accion-vivo:hover:not(:disabled) {
+            background: #006600;
+        }
 
         /* Estilos del Buscador Desplegable Dinámico */
         .combobox-wrapper {
@@ -112,7 +127,7 @@
         .combobox-input-box:focus-within {
             border-color: var(--accent-color);
         }
-        #input-buscar-remota {
+        .combobox-input {
             width: 100%;
             padding: 9px 10px;
             background: transparent;
@@ -122,7 +137,7 @@
             outline: none;
             box-sizing: border-box;
         }
-        #btn-limpiar-busqueda {
+        .btn-limpiar-input {
             width: auto;
             margin: 0;
             padding: 4px 8px;
@@ -133,7 +148,7 @@
             cursor: pointer;
             display: none;
         }
-        #btn-limpiar-busqueda:hover { color: #fff; }
+        .btn-limpiar-input:hover { color: #fff; }
         
         .dropdown-lista {
             display: none;
@@ -224,8 +239,55 @@
             border-left: 3px solid var(--accent-color);
             transition: border-color 0.2s ease;
         }
-        .metric-title { color: #888; font-size: 0.72rem; }
-        .metric-value { font-weight: bold; color: #fff; margin-top: 2px; }
+        .metric-box.full-width {
+            grid-column: span 2;
+        }
+        .metric-title { color: #888; font-size: 0.72rem; text-transform: uppercase; }
+        .metric-value { font-weight: bold; color: #fff; margin-top: 2px; word-break: break-word; }
+
+        /* Tarjetas de Telemetría en Vivo (SNR) */
+        .snr-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .snr-card {
+            background: #161616;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 12px 10px;
+            text-align: center;
+        }
+        .snr-label {
+            font-size: 0.75rem;
+            color: #999;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+        .snr-reading {
+            font-size: 1.45rem;
+            font-weight: 700;
+            font-family: monospace;
+            color: #00ff00;
+        }
+        .snr-reading.alerta { color: #ffaa00; }
+        .snr-reading.error { color: #ff4d4d; }
+        .snr-sub {
+            font-size: 0.72rem;
+            color: #777;
+            margin-top: 4px;
+            font-family: monospace;
+        }
+        .status-pill {
+            font-size: 0.78rem;
+            text-align: center;
+            margin-top: 8px;
+            color: #aaa;
+            font-family: monospace;
+        }
+
         .status-box {
             text-align: center;
             padding: 40px 15px;
@@ -262,7 +324,7 @@
                 📊 Histórico de Portadoras <span>&rsaquo;</span>
             </button>
 
-            <button class="menu-btn" onclick="alert('En desarrollo')">
+            <button class="menu-btn" onclick="mostrarVista('viewMonitoreoRemotas')">
                 📡 Monitoreo de Remotas <span>&rsaquo;</span>
             </button>
 
@@ -271,12 +333,12 @@
             </button>
         </div>
 		
-		<div class="card" style="padding: 20px 15px;">
-			<div id="vinfo">v1.1.5 - 20261118-0900</div>
+		<div class="card" style="padding: 14px 15px;">
+			<div id="vinfo">v1.2.0 - 20261118-1033 - Monitoreo Remotas</div>
 		</div>
     </div>
 
-    <!-- VISTA 3: INTERFAZ PRINCIPAL DEL ANALIZADOR / HISTÓRICO -->
+    <!-- VISTA 3: HISTÓRICO DE PORTADORAS -->
     <div id="viewPrincipal" class="view">
         <header>
             <div>
@@ -291,8 +353,8 @@
             <label for="input-buscar-remota">Buscar Remota (Nombre, Transponder o MHz):</label>
             <div class="combobox-wrapper" id="combobox-remota">
                 <div class="combobox-input-box">
-                    <input type="text" id="input-buscar-remota" placeholder="Escriba para filtrar o toque para ver todas..." autocomplete="off">
-                    <button type="button" id="btn-limpiar-busqueda" title="Limpiar filtro">✕</button>
+                    <input type="text" id="input-buscar-remota" class="combobox-input" placeholder="Escriba para filtrar o toque para ver todas..." autocomplete="off">
+                    <button type="button" id="btn-limpiar-busqueda" class="btn-limpiar-input" title="Limpiar filtro">✕</button>
                 </div>
                 <div class="dropdown-lista" id="lista-remotas-dropdown"></div>
             </div>
@@ -331,10 +393,97 @@
         </div>
     </div>
 
+    <!-- VISTA 4: MONITOREO DE REMOTAS EN TIEMPO REAL -->
+    <div id="viewMonitoreoRemotas" class="view">
+        <header>
+            <div>
+                <h2>📡 Monitoreo de Remotas</h2>
+                <div id="user-info-remotas">Operador: --</div>
+            </div>
+            <button class="btn-volver" style="width: auto; margin: 0; padding: 6px 12px; font-size: 0.78rem;" onclick="mostrarVista('viewMenu')"><span>&lsaquo;</span> Menú</button>
+        </header>
+
+        <!-- Selector de Remota -->
+        <div class="card">
+            <label for="input-buscar-remota-live">Seleccionar Portadora / Remota:</label>
+            <div class="combobox-wrapper" id="combobox-remota-live" style="margin-bottom: 0;">
+                <div class="combobox-input-box">
+                    <input type="text" id="input-buscar-remota-live" class="combobox-input" placeholder="Buscar remota por nombre, TP o MHz..." autocomplete="off">
+                    <button type="button" id="btn-limpiar-busqueda-live" class="btn-limpiar-input" title="Limpiar filtro">✕</button>
+                </div>
+                <div class="dropdown-lista" id="lista-remotas-dropdown-live"></div>
+            </div>
+        </div>
+
+        <!-- Ficha Técnica de la Remota (Datos SMSCPC) -->
+        <div class="card" id="panel-resumen-remota" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 0.85rem; font-weight: bold; color: #fff;" id="remota-titulo-ficha">--</span>
+                <span style="font-size: 0.72rem; color: #00ff00; font-family: monospace;" id="remota-id-badge">ID: --</span>
+            </div>
+
+            <div class="metrics-grid" style="margin-top: 0;">
+                <div class="metric-box full-width">
+                    <div class="metric-title">Cliente / Estado</div>
+                    <div class="metric-value" id="rem-cliente-estado">--</div>
+                </div>
+                <div class="metric-box" style="border-left-color: #ff00ff;">
+                    <div class="metric-title">Transponder</div>
+                    <div class="metric-value" id="rem-transponder">--</div>
+                </div>
+                <div class="metric-box" style="border-left-color: #00ffff;">
+                    <div class="metric-title">Frecuencia / BW</div>
+                    <div class="metric-value" id="rem-frec-bw">--</div>
+                </div>
+                <div class="metric-box" style="border-left-color: #ffaa00;">
+                    <div class="metric-title">Modulación / FEC</div>
+                    <div class="metric-value" id="rem-mod-fec">--</div>
+                </div>
+                <div class="metric-box" style="border-left-color: #8888ff;">
+                    <div class="metric-title">MAC Módem</div>
+                    <div class="metric-value" id="rem-mac" style="font-family: monospace;">--</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-title">IP Módem Remoto</div>
+                    <div class="metric-value" id="rem-ip-modem" style="font-family: monospace;">--</div>
+                </div>
+                <div class="metric-box" style="border-left-color: #ff6666;">
+                    <div class="metric-title">Demodulador / IP</div>
+                    <div class="metric-value" id="rem-demod-info" style="font-family: monospace;">--</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel de Telemetría en Tiempo Real (Buzón) -->
+        <div class="card" id="panel-telemetria-live" style="display: none;">
+            <button id="btn-consultar-snr-live" class="btn-accion-vivo">
+                🔄 Consultar Rx SNR en Vivo
+            </button>
+
+            <div class="snr-grid">
+                <div class="snr-card">
+                    <div class="snr-label">Rx SNR Módem</div>
+                    <div class="snr-reading" id="live-snr-modem">--</div>
+                    <div class="snr-sub" id="live-sub-modem">Satelital</div>
+                </div>
+                <div class="snr-card">
+                    <div class="snr-label">Rx SNR Demod</div>
+                    <div class="snr-reading" id="live-snr-demod">--</div>
+                    <div class="snr-sub" id="live-sub-demod">Telepuerto LAN</div>
+                </div>
+            </div>
+
+            <div class="status-pill" id="lbl-estado-buzon">
+                Listo para consultar valores en tiempo real
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <script>
     const URL_WEBAPP = "https://script.google.com/macros/s/AKfycbxLuOURWX0-EjkTItoLh5upIPL0BVDwdZ6FWdX-BuvUzyluJNe9hficn6KK75m-8e0s/exec";
+    const TOKEN_API = "Baemari_SCPC_Secure_2026_XyZ";
     const TAMANO_LOTE = 30;
     const MAX_ESTACIONES_CACHE = 10;
     
@@ -362,10 +511,15 @@
     let configAnalizadorGlobal = {};
     const cacheLRU = new Map();
 
+    // Estado Histórico
     let portadoraSeleccionada = null;
     let indiceTrazaActual = -1;
     let cargandoLote = false;
     let chartInstance = null;
+
+    // Estado Monitoreo Remotas en Vivo
+    let remotaLiveSeleccionada = null;
+    let consultaLiveActivaId = null;
 
     function safeFloat(val, def = 0.0) {
         if (val === null || val === undefined || String(val).trim() === "") return def;
@@ -395,7 +549,6 @@
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
         document.getElementById(idVista).classList.add('active');
         
-        // Si volvemos a la vista principal del gráfico y hay instancia, forzar redibujado por si cambió el tamaño
         if (idVista === 'viewPrincipal' && chartInstance) {
             setTimeout(() => chartInstance.resize(), 50);
         }
@@ -412,6 +565,311 @@
         `;
     }
 
+    // =========================================================================
+    // COMPONENTE REUTILIZABLE DE COMBOBOX CON BÚSQUEDA
+    // =========================================================================
+    function crearComboboxPortadoras(config) {
+        const inputBuscar = document.getElementById(config.inputId);
+        const btnLimpiar = document.getElementById(config.clearBtnId);
+        const dropdown = document.getElementById(config.dropdownId);
+        const wrapper = document.getElementById(config.wrapperId);
+
+        inputBuscar.placeholder = `Buscar entre ${portadorasOrdenadasGlobal.length} portadoras...`;
+
+        const renderizarOpciones = (filtroTexto = "") => {
+            const termino = filtroTexto.trim().toLowerCase();
+            dropdown.innerHTML = "";
+
+            const filtradas = portadorasOrdenadasGlobal.filter(p => {
+                if (!termino) return true;
+                const nombre = String(p.estacion || "").toLowerCase();
+                const tp = String(p.transponder || "").toLowerCase();
+                const frec = String(p.frecuencia || "").toLowerCase();
+                const cliente = String(p.cliente || "").toLowerCase();
+                return nombre.includes(termino) || tp.includes(termino) || frec.includes(termino) || cliente.includes(termino);
+            });
+
+            if (filtradas.length === 0) {
+                dropdown.innerHTML = '<div class="dropdown-vacio">No se encontraron portadoras coincidentes</div>';
+                return;
+            }
+
+            const seleccionadaActual = config.getSeleccionada();
+
+            filtradas.forEach(p => {
+                const div = document.createElement('div');
+                div.className = 'dropdown-item';
+                if (seleccionadaActual && String(seleccionadaActual.id) === String(p.id)) {
+                    div.classList.add('selected');
+                }
+
+                div.innerHTML = `
+                    <span class="item-nombre">${p.estacion}</span>
+                    <span class="item-meta">[${p.transponder}] ${p.frecuencia} MHz</span>
+                `;
+
+                div.addEventListener('click', () => {
+                    inputBuscar.value = `${p.estacion} [${p.transponder}] - ${p.frecuencia} MHz`;
+                    btnLimpiar.style.display = 'block';
+                    dropdown.classList.remove('open');
+                    config.onSelect(p);
+                });
+
+                dropdown.appendChild(div);
+            });
+        };
+
+        inputBuscar.addEventListener('focus', () => {
+            inputBuscar.select();
+            renderizarOpciones("");
+            dropdown.classList.add('open');
+        });
+
+        inputBuscar.addEventListener('input', () => {
+            const val = inputBuscar.value;
+            btnLimpiar.style.display = val.length > 0 ? 'block' : 'none';
+            renderizarOpciones(val);
+            dropdown.classList.add('open');
+        });
+
+        btnLimpiar.addEventListener('click', () => {
+            inputBuscar.value = "";
+            btnLimpiar.style.display = 'none';
+            renderizarOpciones("");
+            dropdown.classList.add('open');
+            inputBuscar.focus();
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!wrapper.contains(e.target)) {
+                dropdown.classList.remove('open');
+                const sel = config.getSeleccionada();
+                if (sel) {
+                    inputBuscar.value = `${sel.estacion} [${sel.transponder}] - ${sel.frecuencia} MHz`;
+                    btnLimpiar.style.display = 'block';
+                }
+            }
+        });
+    }
+
+    // =========================================================================
+    // INICIALIZACIÓN PRINCIPAL
+    // =========================================================================
+    window.addEventListener('DOMContentLoaded', () => {
+        if (!userId) {
+            mostrarAccesoDenegado("No se detectó una sesión válida de Telegram.");
+            return;
+        }
+
+        fetch(`${URL_WEBAPP}?operacion=init_miniapp&userId=${encodeURIComponent(userId)}`)
+            .then(res => {
+                if (!res.ok) throw new Error("Error HTTP " + res.status);
+                return res.json();
+            })
+            .then(data => {
+                if (!data.status || data.autorizado === false) {
+                    mostrarAccesoDenegado("No posees privilegios para acceder al monitoreo espectral.");
+                    return;
+                }
+
+                listaPortadorasGlobal = data.portadoras || [];
+                configAnalizadorGlobal = data.config || {};
+
+                portadorasOrdenadasGlobal = [...listaPortadorasGlobal].sort((a, b) => {
+                    const tpA = String(a.transponder || "").trim();
+                    const tpB = String(b.transponder || "").trim();
+                    const compTp = tpA.localeCompare(tpB, undefined, { numeric: true, sensitivity: 'base' });
+                    if (compTp !== 0) return compTp;
+                    return safeFloat(a.frecuencia) - safeFloat(b.frecuencia);
+                });
+
+                document.getElementById('user-info').innerText = `Operador: ${userName}`;
+                document.getElementById('user-info-menu').innerText = `Operador: ${userName}`;
+                document.getElementById('user-info-remotas').innerText = `Operador: ${userName}`;
+                
+                inicializarBuscadorHistorico();
+                inicializarModuloRemotasLive();
+                initChart();
+                mostrarVista('viewMenu');
+            })
+            .catch(err => {
+                mostrarAccesoDenegado("Error de conexión: " + err.message);
+            });
+    });
+
+    // =========================================================================
+    // MÓDULO: MONITOREO DE REMOTAS EN TIEMPO REAL (BUZÓN)
+    // =========================================================================
+    function inicializarModuloRemotasLive() {
+        crearComboboxPortadoras({
+            inputId: 'input-buscar-remota-live',
+            clearBtnId: 'btn-limpiar-busqueda-live',
+            dropdownId: 'lista-remotas-dropdown-live',
+            wrapperId: 'combobox-remota-live',
+            getSeleccionada: () => remotaLiveSeleccionada,
+            onSelect: (portadora) => {
+                cargarFichaRemotaLive(portadora);
+            }
+        });
+
+        document.getElementById('btn-consultar-snr-live').addEventListener('click', () => {
+            if (!remotaLiveSeleccionada) return;
+            ejecutarConsultaSnrLive(remotaLiveSeleccionada);
+        });
+    }
+
+    function cargarFichaRemotaLive(p) {
+        remotaLiveSeleccionada = p;
+        // Cancelar cualquier polling previo si el usuario cambió de estación
+        consultaLiveActivaId = null;
+
+        document.getElementById('panel-resumen-remota').style.display = 'block';
+        document.getElementById('panel-telemetria-live').style.display = 'block';
+
+        document.getElementById('remota-titulo-ficha').innerText = p.estacion || "Sin nombre";
+        document.getElementById('remota-id-badge').innerText = `ID: ${p.id}`;
+
+        const clienteStr = p.cliente || "Sin cliente";
+        const estadoStr = p.estado || "S/E";
+        document.getElementById('rem-cliente-estado').innerText = `${clienteStr} (${estadoStr})`;
+        document.getElementById('rem-transponder').innerText = p.transponder || "--";
+        document.getElementById('rem-frec-bw').innerText = `${p.frecuencia} MHz / ${p.bandwidth} MHz`;
+        document.getElementById('rem-mod-fec').innerText = `${p.modulacion || "--"} / ${p.fec || "--"}`;
+        document.getElementById('rem-mac').innerText = p.mac || "No registrada";
+        document.getElementById('rem-ip-modem').innerText = p.ip_modem || "Sin IP";
+
+        const demodNombre = p.desmodulador || "S/D";
+        const demodIp = p.ip_demod || "Sin IP";
+        document.getElementById('rem-demod-info').innerText = `${demodNombre} (${demodIp})`;
+
+        // Resetear lecturas previas
+        resetearTarjetasSnrLive();
+        
+        // Disparar automáticamente la primera lectura al seleccionar la remota
+        ejecutarConsultaSnrLive(p);
+    }
+
+    function resetearTarjetasSnrLive() {
+        const elModem = document.getElementById('live-snr-modem');
+        const elDemod = document.getElementById('live-snr-demod');
+        elModem.className = 'snr-reading';
+        elDemod.className = 'snr-reading';
+        elModem.innerText = '--';
+        elDemod.innerText = '--';
+    }
+
+    function formatearLecturaSnr(elemento, valorRaw) {
+        const val = String(valorRaw || "S/C").trim();
+        elemento.className = 'snr-reading';
+
+        if (val === "S/C" || val === "Error en Hilo") {
+            elemento.classList.add('error');
+            elemento.innerText = "S/C";
+        } else if (val === "S/V" || val === "TDM") {
+            elemento.classList.add('alerta');
+            elemento.innerText = val;
+        } else {
+            elemento.innerText = `${val} dB`;
+        }
+    }
+
+    async function ejecutarConsultaSnrLive(portadora) {
+        const btnConsultar = document.getElementById('btn-consultar-snr-live');
+        const lblEstado = document.getElementById('lbl-estado-buzon');
+        const elModem = document.getElementById('live-snr-modem');
+        const elDemod = document.getElementById('live-snr-demod');
+
+        const reqId = `${Date.now()}_${portadora.id}`;
+        consultaLiveActivaId = reqId;
+        const tInicio = performance.now();
+
+        btnConsultar.disabled = true;
+        btnConsultar.innerText = "⏳ Consultando equipos en red...";
+        elModem.className = 'snr-reading';
+        elDemod.className = 'snr-reading';
+        elModem.innerText = '...';
+        elDemod.innerText = '...';
+        lblEstado.style.color = '#aaa';
+        lblEstado.innerText = "Enviando solicitud al nodo local...";
+
+        try {
+            // 1. Crear solicitud en el buzón
+            const resCrear = await fetch(URL_WEBAPP, {
+                method: "POST",
+                body: JSON.stringify({
+                    token: TOKEN_API,
+                    operacion: "crear_solicitud_buzon",
+                    reqId: reqId,
+                    id_equipo: String(portadora.id),
+                    ip_modem: portadora.ip_modem || "",
+                    ip_demod: portadora.ip_demod || ""
+                })
+            });
+
+            const jsonCrear = await resCrear.json();
+            if (!jsonCrear.status) {
+                throw new Error(jsonCrear.error || "No se pudo crear la solicitud");
+            }
+
+            if (consultaLiveActivaId !== reqId) return;
+            lblEstado.innerText = "Esperando respuesta de módem y demodulador...";
+
+            // 2. Polling con auto-limpieza (máx ~30 segundos -> 20 intentos de 1.5s)
+            const maxIntentos = 20;
+            for (let intento = 1; intento <= maxIntentos; intento++) {
+                await new Promise(r => setTimeout(r, 1500));
+                if (consultaLiveActivaId !== reqId) return; // Usuario cambió de estación
+
+                const segTranscurridos = ((performance.now() - tInicio) / 1000).toFixed(1);
+                lblEstado.innerText = `Escaneando en vivo... (${segTranscurridos}s)`;
+
+                const urlPoll = `${URL_WEBAPP}?operacion=consultar_y_limpiar_buzon&reqId=${encodeURIComponent(reqId)}`;
+                const resPoll = await fetch(urlPoll);
+                const jsonPoll = await resPoll.json();
+
+                if (jsonPoll.status === "COMPLETADO") {
+                    const tiempoTotal = ((performance.now() - tInicio) / 1000).toFixed(1);
+                    formatearLecturaSnr(elModem, jsonPoll.rx_snr_modem);
+                    formatearLecturaSnr(elDemod, jsonPoll.rx_snr_demod);
+
+                    const horaAhora = new Date().toLocaleTimeString();
+                    lblEstado.style.color = '#00ff00';
+                    lblEstado.innerText = `✓ Actualizado a las ${horaAhora} (Tiempo: ${tiempoTotal}s)`;
+                    btnConsultar.disabled = false;
+                    btnConsultar.innerText = "🔄 Actualizar Rx SNR en Vivo";
+                    return;
+                }
+            }
+
+            // Si agota el tiempo de espera
+            if (consultaLiveActivaId === reqId) {
+                elModem.classList.add('error');
+                elDemod.classList.add('error');
+                elModem.innerText = "Timeout";
+                elDemod.innerText = "Timeout";
+                lblEstado.style.color = '#ff4d4d';
+                lblEstado.innerText = "⚠️ Tiempo agotado. Verifique si el bot local está en línea.";
+                btnConsultar.disabled = false;
+                btnConsultar.innerText = "🔄 Reintentar Consulta";
+            }
+
+        } catch (err) {
+            if (consultaLiveActivaId === reqId) {
+                elModem.classList.add('error');
+                elDemod.classList.add('error');
+                elModem.innerText = "Error";
+                elDemod.innerText = "Error";
+                lblEstado.style.color = '#ff4d4d';
+                lblEstado.innerText = `❌ ${err.message}`;
+                btnConsultar.disabled = false;
+                btnConsultar.innerText = "🔄 Reintentar Consulta";
+            }
+        }
+    }
+
+    // =========================================================================
+    // MÓDULO: HISTÓRICO DE PORTADORAS (SIN CAMBIOS FUNCIONALES)
+    // =========================================================================
     let labelHitBoxes = [];
 
     const fphOverlayPlugin = {
@@ -591,133 +1049,20 @@
         };
     }
 
-    window.addEventListener('DOMContentLoaded', () => {
-        if (!userId) {
-            mostrarAccesoDenegado("No se detectó una sesión válida de Telegram.");
-            return;
-        }
-
-        fetch(`${URL_WEBAPP}?operacion=init_miniapp&userId=${encodeURIComponent(userId)}`)
-            .then(res => {
-                if (!res.ok) throw new Error("Error HTTP " + res.status);
-                return res.json();
-            })
-            .then(data => {
-                if (!data.status || data.autorizado === false) {
-                    mostrarAccesoDenegado("No posees privilegios para acceder al monitoreo espectral.");
-                    return;
-                }
-
-                listaPortadorasGlobal = data.portadoras || [];
-                configAnalizadorGlobal = data.config || {};
-
-                portadorasOrdenadasGlobal = [...listaPortadorasGlobal].sort((a, b) => {
-                    const tpA = String(a.transponder || "").trim();
-                    const tpB = String(b.transponder || "").trim();
-                    const compTp = tpA.localeCompare(tpB, undefined, { numeric: true, sensitivity: 'base' });
-                    if (compTp !== 0) return compTp;
-                    return safeFloat(a.frecuencia) - safeFloat(b.frecuencia);
-                });
-
-                document.getElementById('user-info').innerText = `Operador: ${userName}`;
-                document.getElementById('user-info-menu').innerText = `Operador: ${userName}`;
-                
-                inicializarBuscadorRemotas();
-                initChart();
-                mostrarVista('viewMenu'); // 👈 Iniciamos mostrando el Menú Principal
-            })
-            .catch(err => {
-                mostrarAccesoDenegado("Error de conexión: " + err.message);
-            });
-    });
-
-    function inicializarBuscadorRemotas() {
-        const inputBuscar = document.getElementById('input-buscar-remota');
-        const btnLimpiar = document.getElementById('btn-limpiar-busqueda');
-        const dropdown = document.getElementById('lista-remotas-dropdown');
-        const wrapper = document.getElementById('combobox-remota');
-
-        inputBuscar.placeholder = `Buscar entre ${portadorasOrdenadasGlobal.length} portadoras...`;
-
-        const renderizarOpciones = (filtroTexto = "") => {
-            const termino = filtroTexto.trim().toLowerCase();
-            dropdown.innerHTML = "";
-
-            const filtradas = portadorasOrdenadasGlobal.filter(p => {
-                if (!termino) return true;
-                const nombre = String(p.estacion || "").toLowerCase();
-                const tp = String(p.transponder || "").toLowerCase();
-                const frec = String(p.frecuencia || "").toLowerCase();
-                return nombre.includes(termino) || tp.includes(termino) || frec.includes(termino);
-            });
-
-            if (filtradas.length === 0) {
-                dropdown.innerHTML = '<div class="dropdown-vacio">No se encontraron portadoras coincidentes</div>';
-                return;
-            }
-
-            filtradas.forEach(p => {
-                const div = document.createElement('div');
-                div.className = 'dropdown-item';
-                if (portadoraSeleccionada && String(portadoraSeleccionada.id) === String(p.id)) {
-                    div.classList.add('selected');
-                }
-
-                div.innerHTML = `
-                    <span class="item-nombre">${p.estacion}</span>
-                    <span class="item-meta">[${p.transponder}] ${p.frecuencia} MHz</span>
-                `;
-
-                div.addEventListener('click', () => {
-                    elegirPortadora(p);
-                    dropdown.classList.remove('open');
-                });
-
-                dropdown.appendChild(div);
-            });
-        };
-
-        const elegirPortadora = (portadora) => {
-            portadoraSeleccionada = portadora;
-            const idSel = String(portadora.id);
-            inputBuscar.value = `${portadora.estacion} [${portadora.transponder}] - ${portadora.frecuencia} MHz`;
-            btnLimpiar.style.display = 'block';
-
-            document.getElementById('val-frec').innerText = `${portadora.frecuencia} MHz / ${portadora.bandwidth} MHz`;
-            document.getElementById('val-transponder').innerText = `${portadora.transponder}`;
-            document.getElementById('val-piso').innerText = `${obtenerPisoBase(portadora.transponder).toFixed(1)} dBm`;
-
-            seleccionarPortadora(idSel);
-        };
-
-        inputBuscar.addEventListener('focus', () => {
-            inputBuscar.select();
-            renderizarOpciones("");
-            dropdown.classList.add('open');
-        });
-
-        inputBuscar.addEventListener('input', () => {
-            const val = inputBuscar.value;
-            btnLimpiar.style.display = val.length > 0 ? 'block' : 'none';
-            renderizarOpciones(val);
-            dropdown.classList.add('open');
-        });
-
-        btnLimpiar.addEventListener('click', () => {
-            inputBuscar.value = "";
-            btnLimpiar.style.display = 'none';
-            renderizarOpciones("");
-            dropdown.classList.add('open');
-            inputBuscar.focus();
-        });
-
-        document.addEventListener('click', (e) => {
-            if (!wrapper.contains(e.target)) {
-                dropdown.classList.remove('open');
-                if (portadoraSeleccionada) {
-                    inputBuscar.value = `${portadoraSeleccionada.estacion} [${portadoraSeleccionada.transponder}] - ${portadoraSeleccionada.frecuencia} MHz`;
-                    btnLimpiar.style.display = 'block';
-                }
+    function inicializarBuscadorHistorico() {
+        crearComboboxPortadoras({
+            inputId: 'input-buscar-remota',
+            clearBtnId: 'btn-limpiar-busqueda',
+            dropdownId: 'lista-remotas-dropdown',
+            wrapperId: 'combobox-remota',
+            getSeleccionada: () => portadoraSeleccionada,
+            onSelect: (portadora) => {
+                portadoraSeleccionada = portadora;
+                const idSel = String(portadora.id);
+                document.getElementById('val-frec').innerText = `${portadora.frecuencia} MHz / ${portadora.bandwidth} MHz`;
+                document.getElementById('val-transponder').innerText = `${portadora.transponder}`;
+                document.getElementById('val-piso').innerText = `${obtenerPisoBase(portadora.transponder).toFixed(1)} dBm`;
+                seleccionarPortadora(idSel);
             }
         });
 
