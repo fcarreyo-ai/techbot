@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RSAM</title>
+    <title>MRSCPC</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -54,14 +54,43 @@
         label { display: block; font-size: 0.82rem; margin-bottom: 5px; color: #aaa; }
         button {
             width: 100%;
-            padding: 9px;
+            padding: 11px;
             background: #2a2a2a;
             color: #fff;
             border: 1px solid var(--border-color);
             border-radius: 6px;
-            font-size: 0.88rem;
+            font-size: 0.9rem;
             box-sizing: border-box;
             margin-bottom: 8px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        button:hover {
+            background: #333;
+            border-color: var(--accent-color);
+        }
+
+        /* Botones del Menú Principal */
+        .menu-btn {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #222;
+            border-left: 4px solid var(--accent-color);
+            padding: 14px 16px;
+            font-size: 1rem;
+            margin-bottom: 12px;
+        }
+        .menu-btn span { font-size: 1.1rem; color: #888; }
+        .menu-btn.futuro {
+            border-left-color: #555;
+            color: #888;
+        }
+        .btn-volver {
+            background: #1a1a1a;
+            border-color: #444;
+            color: #ccc;
+            margin-bottom: 10px;
         }
 
         /* Estilos del Buscador Desplegable Dinámico */
@@ -215,14 +244,39 @@
         </div>
     </div>
 
-    <!-- VISTA 2: INTERFAZ PRINCIPAL DEL ANALIZADOR -->
+    <!-- VISTA 2: MENÚ PRINCIPAL -->
+    <div id="viewMenu" class="view">
+        <header>
+            <div>
+                <h2>🛰️ Monitoreo Remoto SCPC - v1.1.4 202611180825</h2>
+                <div id="user-info-menu">Operador: --</div>
+            </div>
+            <div style="font-size: 0.75rem; color: #00ff00;">● En línea</div>
+        </header>
+
+        <div class="card" style="padding: 20px 15px;">
+            <button class="menu-btn" onclick="mostrarVista('viewPrincipal')">
+                📊 Histórico de Portadoras <span>&rsaquo;</span>
+            </button>
+
+            <button class="menu-btn" onclick="alert('Módulo en desarrollo próximamente.')">
+                📡 Monitoreo de Remotas <span>&rsaquo;</span>
+            </button>
+
+            <button class="menu-btn futuro" onclick="alert('Módulo disponible a futuro.')">
+                📈 Analizador de Espectro <span>(Próximamente)</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- VISTA 3: INTERFAZ PRINCIPAL DEL ANALIZADOR / HISTÓRICO -->
     <div id="viewPrincipal" class="view">
         <header>
             <div>
-                <h2>🛰️ Registro de Portadoras - v1.1.3 202611180756</h2>
+                <h2>📊 Histórico de Portadoras</h2>
                 <div id="user-info">Operador: --</div>
             </div>
-            <div id="connection-status" style="font-size: 0.75rem; color: #00ff00;">● En línea</div>
+            <button class="btn-volver" style="width: auto; margin: 0; padding: 6px 12px; font-size: 0.78rem;" onclick="mostrarVista('viewMenu')">⬅ Menú</button>
         </header>
 
         <!-- Controles de Selección con Filtro Dinámico -->
@@ -333,6 +387,11 @@
     function mostrarVista(idVista) {
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
         document.getElementById(idVista).classList.add('active');
+        
+        // Si volvemos a la vista principal del gráfico y hay instancia, forzar redibujado por si cambió el tamaño
+        if (idVista === 'viewPrincipal' && chartInstance) {
+            setTimeout(() => chartInstance.resize(), 50);
+        }
     }
 
     function mostrarAccesoDenegado(motivo) {
@@ -346,112 +405,107 @@
         `;
     }
 
-	// Variable global para almacenar las áreas de las etiquetas en la gráfica
-	let labelHitBoxes = [];
+    let labelHitBoxes = [];
 
-	const fphOverlayPlugin = {
-		id: 'fphOverlay',
-		afterDatasetsDraw(chart) {
-			if (!portadoraSeleccionada || indiceTrazaActual < 0) return;
+    const fphOverlayPlugin = {
+        id: 'fphOverlay',
+        afterDatasetsDraw(chart) {
+            if (!portadoraSeleccionada || indiceTrazaActual < 0) return;
 
-			const { ctx, chartArea: { top, bottom, left, right }, scales: { y } } = chart;
-			const frecCentro = safeFloat(portadoraSeleccionada.frecuencia);
-			const bw = safeFloat(portadoraSeleccionada.bandwidth, 1.0);
-			const span = safeFloat(configAnalizadorGlobal.FPH_SPAN_MHZ, 7.5);
-			const polActiva = (portadoraSeleccionada.polarizacion || "").toUpperCase();
+            const { ctx, chartArea: { top, bottom, left, right }, scales: { y } } = chart;
+            const frecCentro = safeFloat(portadoraSeleccionada.frecuencia);
+            const bw = safeFloat(portadoraSeleccionada.bandwidth, 1.0);
+            const span = safeFloat(configAnalizadorGlobal.FPH_SPAN_MHZ, 7.5);
+            const polActiva = (portadoraSeleccionada.polarizacion || "").toUpperCase();
 
-			const fMin = frecCentro - (span / 2.0);
-			const fMax = frecCentro + (span / 2.0);
+            const fMin = frecCentro - (span / 2.0);
+            const fMax = frecCentro + (span / 2.0);
 
-			const freqToPixelX = (freq) => {
-				const ratio = (freq - fMin) / (fMax - fMin);
-				return left + ratio * (right - left);
-			};
+            const freqToPixelX = (freq) => {
+                const ratio = (freq - fMin) / (fMax - fMin);
+                return left + ratio * (right - left);
+            };
 
-			ctx.save();
+            ctx.save();
 
-			// (Aquí se dibujan las líneas de frecuencia central, BW y piso de ruido...)
-			const xCentro = freqToPixelX(frecCentro);
-			ctx.strokeStyle = '#0088FF';
-			ctx.lineWidth = 1.3;
-			ctx.setLineDash([4, 4]);
-			ctx.beginPath();
-			ctx.moveTo(xCentro, top);
-			ctx.lineTo(xCentro, bottom);
-			ctx.stroke();
+            const xCentro = freqToPixelX(frecCentro);
+            ctx.strokeStyle = '#0088FF';
+            ctx.lineWidth = 1.3;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(xCentro, top);
+            ctx.lineTo(xCentro, bottom);
+            ctx.stroke();
 
-			const xBwIzq = freqToPixelX(frecCentro - bw / 2.0);
-			const xBwDer = freqToPixelX(frecCentro + bw / 2.0);
-			ctx.strokeStyle = '#666666';
-			ctx.lineWidth = 1;
-			ctx.setLineDash([2, 3]);
-			[xBwIzq, xBwDer].forEach(posX => {
-				if (posX >= left && posX <= right) {
-					ctx.beginPath();
-					ctx.moveTo(posX, top);
-					ctx.lineTo(posX, bottom);
-					ctx.stroke();
-				}
-			});
+            const xBwIzq = freqToPixelX(frecCentro - bw / 2.0);
+            const xBwDer = freqToPixelX(frecCentro + bw / 2.0);
+            ctx.strokeStyle = '#666666';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([2, 3]);
+            [xBwIzq, xBwDer].forEach(posX => {
+                if (posX >= left && posX <= right) {
+                    ctx.beginPath();
+                    ctx.moveTo(posX, top);
+                    ctx.lineTo(posX, bottom);
+                    ctx.stroke();
+                }
+            });
 
-			const pisoBase = obtenerPisoBase(portadoraSeleccionada.transponder);
-			const yPiso = y.getPixelForValue(pisoBase);
-			if (yPiso >= top && yPiso <= bottom) {
-				ctx.strokeStyle = '#FF3333';
-				ctx.lineWidth = 1.2;
-				ctx.setLineDash([3, 3]);
-				ctx.beginPath();
-				ctx.moveTo(left, yPiso);
-				ctx.lineTo(right, yPiso);
-				ctx.stroke();
-			}
+            const pisoBase = obtenerPisoBase(portadoraSeleccionada.transponder);
+            const yPiso = y.getPixelForValue(pisoBase);
+            if (yPiso >= top && yPiso <= bottom) {
+                ctx.strokeStyle = '#FF3333';
+                ctx.lineWidth = 1.2;
+                ctx.setLineDash([3, 3]);
+                ctx.beginPath();
+                ctx.moveTo(left, yPiso);
+                ctx.lineTo(right, yPiso);
+                ctx.stroke();
+            }
 
-			ctx.setLineDash([]);
-			const datosTraza = chart.data.datasets[0].data;
-			const vecinas = listaPortadorasGlobal.filter(p => {
-				const f = safeFloat(p.frecuencia);
-				const pol = (p.polarizacion || "").toUpperCase();
-				return pol === polActiva && f >= fMin && f <= fMax;
-			});
+            ctx.setLineDash([]);
+            const datosTraza = chart.data.datasets[0].data;
+            const vecinas = listaPortadorasGlobal.filter(p => {
+                const f = safeFloat(p.frecuencia);
+                const pol = (p.polarizacion || "").toUpperCase();
+                return pol === polActiva && f >= fMin && f <= fMax;
+            });
 
-			// Limpiamos las áreas táctiles anteriores antes de redibujar
-			labelHitBoxes = [];
+            labelHitBoxes = [];
 
-			vecinas.forEach(v => {
-				const fVec = safeFloat(v.frecuencia);
-				const xVec = freqToPixelX(fVec);
-				const idxPunto = Math.min(710, Math.max(0, Math.round(((fVec - fMin) / span) * 710)));
-				const ampPunto = datosTraza[idxPunto] || -100;
-				let yTexto = y.getPixelForValue(ampPunto) - 8;
-				if (yTexto < top + 45) yTexto = top + 45;
+            vecinas.forEach(v => {
+                const fVec = safeFloat(v.frecuencia);
+                const xVec = freqToPixelX(fVec);
+                const idxPunto = Math.min(710, Math.max(0, Math.round(((fVec - fMin) / span) * 710)));
+                const ampPunto = datosTraza[idxPunto] || -100;
+                let yTexto = y.getPixelForValue(ampPunto) - 8;
+                if (yTexto < top + 45) yTexto = top + 45;
 
-				const esPrincipal = String(v.id) === String(portadoraSeleccionada.id);
-				
-				// Medimos el ancho del texto para calcular la caja táctil precisa
-				ctx.font = esPrincipal ? 'bold 10px sans-serif' : '9px sans-serif';
-				const textWidth = ctx.measureText(v.estacion).width;
+                const esPrincipal = String(v.id) === String(portadoraSeleccionada.id);
+                
+                ctx.font = esPrincipal ? 'bold 10px sans-serif' : '9px sans-serif';
+                const textWidth = ctx.measureText(v.estacion).width;
 
-				// Como el texto está rotado -90 grados, invertimos ancho y alto para el área de clic
-				labelHitBoxes.push({
-					xMin: xVec - 8,
-					xMax: xVec + 10,
-					yMin: yTexto - textWidth - 4,
-					yMax: yTexto + 4,
-					portadora: v
-				});
+                labelHitBoxes.push({
+                    xMin: xVec - 8,
+                    xMax: xVec + 10,
+                    yMin: yTexto - textWidth - 4,
+                    yMax: yTexto + 4,
+                    portadora: v
+                });
 
-				ctx.save();
-				ctx.translate(xVec, yTexto);
-				ctx.rotate(-Math.PI / 2);
-				ctx.fillStyle = esPrincipal ? '#FFFF00' : '#B0B0B0';
-				ctx.textAlign = 'left';
-				ctx.fillText(v.estacion, 0, 3);
-				ctx.restore();
-			});
+                ctx.save();
+                ctx.translate(xVec, yTexto);
+                ctx.rotate(-Math.PI / 2);
+                ctx.fillStyle = esPrincipal ? '#FFFF00' : '#B0B0B0';
+                ctx.textAlign = 'left';
+                ctx.fillText(v.estacion, 0, 3);
+                ctx.restore();
+            });
 
-			ctx.restore();
-		}
-	};
+            ctx.restore();
+        }
+    };
 
     function obtenerPisoBase(transponder) {
         if (!transponder) return -90.0;
@@ -460,10 +514,6 @@
         return safeFloat(configAnalizadorGlobal[clave], -90.0);
     }
 
-    /**
-     * Calcula el nivel promedio en el 60% útil centrado en el centroide espectral,
-     * y evalúa presencia (FPH_MIN_LEV) y deformación de cresta (FPH_UMBRAL_RIPPLE).
-     */
     function calcularMetricasPortadora(puntos, portadora) {
         const bwTeorico = safeFloat(portadora.bandwidth, 1.0);
         const spanOperacion = safeFloat(configAnalizadorGlobal.FPH_SPAN_MHZ, 7.5);
@@ -479,7 +529,6 @@
 
         const k60 = Math.round(((bwTeorico * 0.6) / 2.0) / hzPerPoint);
 
-        // 1. Condición No Detectada / Caída
         if (deltaPresencia < fphMinLev) {
             const idxStart = Math.max(0, idxCentroTeorico - k60);
             const idxEnd = Math.min(710, idxCentroTeorico + k60);
@@ -492,18 +541,15 @@
             };
         }
 
-        // 2. Ventana de búsqueda de centroide (±BW/2)
         const halfBwPoints = Math.round((bwTeorico / 2.0) / hzPerPoint);
         const wStart = Math.max(0, idxCentroTeorico - halfBwPoints);
         const wEnd = Math.min(710, idxCentroTeorico + halfBwPoints);
 
-        // 3. Suavizado por media móvil de 3 puntos
         const smoothed = [...puntos];
         for (let sIdx = 1; sIdx < 710; sIdx++) {
             smoothed[sIdx] = (puntos[sIdx - 1] + puntos[sIdx] + puntos[sIdx + 1]) / 3.0;
         }
 
-        // 4. Centroide por masa espectral en potencia lineal
         let num = 0.0;
         let den = 0.0;
         for (let idx = wStart; idx <= wEnd; idx++) {
@@ -515,7 +561,6 @@
         let idxCentroReal = den > 0 ? Math.round(num / den) : idxCentroTeorico;
         idxCentroReal = Math.max(wStart, Math.min(wEnd, idxCentroReal));
 
-        // 5. Nivel promedio en el 60% del BW útil centrado en idxCentroReal
         const idxStart = Math.max(0, idxCentroReal - k60);
         const idxEnd = Math.min(710, idxCentroReal + k60);
         const segmento = puntos.slice(idxStart, idxEnd + 1);
@@ -524,7 +569,6 @@
         const deltaDb = Math.abs(potenciaPromedioDbm - pisoRuido);
         const rippleDetectado = Math.max(...segmento) - Math.min(...segmento);
 
-        // 6. Alerta por deformación de cresta (Ripple)
         if (rippleDetectado > fphUmbralRipple) {
             return {
                 promedioDbm: potenciaPromedioDbm,
@@ -569,9 +613,11 @@
                 });
 
                 document.getElementById('user-info').innerText = `Operador: ${userName}`;
+                document.getElementById('user-info-menu').innerText = `Operador: ${userName}`;
+                
                 inicializarBuscadorRemotas();
                 initChart();
-                mostrarVista('viewPrincipal');
+                mostrarVista('viewMenu'); // 👈 Iniciamos mostrando el Menú Principal
             })
             .catch(err => {
                 mostrarAccesoDenegado("Error de conexión: " + err.message);
@@ -793,7 +839,6 @@
         }
         const puntos = registro.puntos;
 
-        // Calcular nivel promedio y estado de salud de la portadora
         const metricas = calcularMetricasPortadora(puntos, portadoraSeleccionada);
         const boxDelta = document.getElementById('box-nivel-delta');
         const valDelta = document.getElementById('val-delta');
@@ -847,85 +892,79 @@
         btnNext.disabled = (indiceTrazaActual >= cargadas - 1);
     }
 
-	function initChart() {
-		const ctx = document.getElementById('spectrumChart').getContext('2d');
-		const refLevel = safeFloat(configAnalizadorGlobal.FPH_REF_LEVEL_DBM, -50);
-		const ampRes = safeFloat(configAnalizadorGlobal.FPH_AMP_RES, 50);
+    function initChart() {
+        const ctx = document.getElementById('spectrumChart').getContext('2d');
+        const refLevel = safeFloat(configAnalizadorGlobal.FPH_REF_LEVEL_DBM, -50);
+        const ampRes = safeFloat(configAnalizadorGlobal.FPH_AMP_RES, 50);
 
-		const canvas = document.getElementById('spectrumChart');
+        const canvas = document.getElementById('spectrumChart');
 
-		// 🎯 NUEVO: Escuchar clics sobre el canvas para seleccionar portadoras por su etiqueta
-		canvas.addEventListener('click', (e) => {
-			const rect = canvas.getBoundingClientRect();
-			const clickX = e.offsetX;
-			const clickY = e.offsetY;
+        canvas.addEventListener('click', (e) => {
+            const clickX = e.offsetX;
+            const clickY = e.offsetY;
 
-			for (let box of labelHitBoxes) {
-				if (clickX >= box.xMin && clickX <= box.xMax && clickY >= box.yMin && clickY <= box.yMax) {
-					// Encontramos la portadora pulsada
-					const portadoraEncontrada = box.portadora;
-					
-					// Actualizamos el input del buscador visualmente
-					const inputBuscar = document.getElementById('input-buscar-remota');
-					const btnLimpiar = document.getElementById('btn-limpiar-busqueda');
-					inputBuscar.value = `${portadoraEncontrada.estacion} [${portadoraEncontrada.transponder}] - ${portadoraEncontrada.frecuencia} MHz`;
-					btnLimpiar.style.display = 'block';
+            for (let box of labelHitBoxes) {
+                if (clickX >= box.xMin && clickX <= box.xMax && clickY >= box.yMin && clickY <= box.yMax) {
+                    const portadoraEncontrada = box.portadora;
+                    
+                    const inputBuscar = document.getElementById('input-buscar-remota');
+                    const btnLimpiar = document.getElementById('btn-limpiar-busqueda');
+                    inputBuscar.value = `${portadoraEncontrada.estacion} [${portadoraEncontrada.transponder}] - ${portadoraEncontrada.frecuencia} MHz`;
+                    btnLimpiar.style.display = 'block';
 
-					// Actualizamos métricas de la cabecera
-					portadoraSeleccionada = portadoraEncontrada;
-					document.getElementById('val-frec').innerText = `${portadoraEncontrada.frecuencia} MHz / ${portadoraEncontrada.bandwidth} MHz`;
-					document.getElementById('val-transponder').innerText = `${portadoraEncontrada.transponder}`;
-					document.getElementById('val-piso').innerText = `${obtenerPisoBase(portadoraEncontrada.transponder).toFixed(1)} dBm`;
+                    portadoraSeleccionada = portadoraEncontrada;
+                    document.getElementById('val-frec').innerText = `${portadoraEncontrada.frecuencia} MHz / ${portadoraEncontrada.bandwidth} MHz`;
+                    document.getElementById('val-transponder').innerText = `${portadoraEncontrada.transponder}`;
+                    document.getElementById('val-piso').innerText = `${obtenerPisoBase(portadoraEncontrada.transponder).toFixed(1)} dBm`;
 
-					// Cargamos su traza
-					seleccionarPortadora(String(portadoraEncontrada.id));
-					break;
-				}
-			}
-		});
+                    seleccionarPortadora(String(portadoraEncontrada.id));
+                    break;
+                }
+            }
+        });
 
-		chartInstance = new Chart(ctx, {
-			type: 'line',
-			data: {
-				labels: Array.from({length: 711}, (_, i) => i),
-				datasets: [{
-					label: 'Traza Espectral',
-					data: Array(711).fill(refLevel - ampRes),
-					borderColor: '#00FF00',
-					borderWidth: 1.5,
-					pointRadius: 0,
-					fill: false
-				}]
-			},
-			plugins: [fphOverlayPlugin],
-			options: {
-				responsive: true,
-				maintainAspectRatio: false,
-				animation: false,
-				scales: {
-					x: {
-						grid: { color: '#262626' },
-						ticks: {
-							color: '#888',
-							font: { size: 9 },
-							maxTicksLimit: 11
-						}
-					},
-					y: {
-						min: refLevel - ampRes,
-						max: refLevel,
-						grid: { color: '#262626' },
-						ticks: {
-							color: '#888',
-							font: { size: 9 },
-							stepSize: ampRes / 10
-						}
-					}
-				},
-				plugins: { legend: { display: false } }
-			}
-		});
-	}
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: Array.from({length: 711}, (_, i) => i),
+                datasets: [{
+                    label: 'Traza Espectral',
+                    data: Array(711).fill(refLevel - ampRes),
+                    borderColor: '#00FF00',
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    fill: false
+                }]
+            },
+            plugins: [fphOverlayPlugin],
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                scales: {
+                    x: {
+                        grid: { color: '#262626' },
+                        ticks: {
+                            color: '#888',
+                            font: { size: 9 },
+                            maxTicksLimit: 11
+                        }
+                    },
+                    y: {
+                        min: refLevel - ampRes,
+                        max: refLevel,
+                        grid: { color: '#262626' },
+                        ticks: {
+                            color: '#888',
+                            font: { size: 9 },
+                            stepSize: ampRes / 10
+                        }
+                    }
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+    }
 </script>
 
 </body>
