@@ -334,7 +334,7 @@
         </div>
 		
 		<div class="card" style="padding: 14px 15px;">
-			<div id="vinfo">v1.2.1 - 20261119-1059 - Monitoreo Remotas</div>
+			<div id="vinfo">v1.2.1 - 20261119-1103 - Monitoreo Remotas</div>
 		</div>
     </div>
 
@@ -735,13 +735,13 @@
         const estadoStr = p.estado || "S/E";
         document.getElementById('rem-cliente-estado').innerText = `${clienteStr} / ${estadoStr}`;
         document.getElementById('rem-transponder').innerText = p.transponder || "--";
-        document.getElementById('rem-frec-bw').innerText = `${p.frecuencia} MHz<br>${p.bandwidth} MHz`;
+        document.getElementById('rem-frec-bw').innerText = `${p.frecuencia} MHz\n${p.bandwidth} MHz`;
         //document.getElementById('rem-mod-fec').innerText = `${p.modulacion || "--"} / ${p.fec || "--"}`;
-        document.getElementById('rem-modem').innerText = `${p.mac}<br>{p.ip_modem}` || "No registrada";
+        document.getElementById('rem-modem').innerText = `${p.mac}\n${p.ip_modem}` || "No registrada";
 
         const demodNombre = p.desmodulador || "S/D";
         const demodIp = p.ip_demod || "Sin IP";
-        document.getElementById('rem-demod').innerText = `${demodNombre}<br>${demodIp}`;
+        document.getElementById('rem-demod').innerText = `${demodNombre}\n${demodIp}`;
 
         // Resetear lecturas previas
         resetearTarjetasSnrLive();
