@@ -334,7 +334,7 @@
         </div>
 		
 		<div class="card" style="padding: 14px 15px;">
-			<div id="vinfo">v1.2.0 - 20261118-1033 - Monitoreo Remotas</div>
+			<div id="vinfo">v1.2.1 - 20261119-1059 - Monitoreo Remotas</div>
 		</div>
     </div>
 
@@ -435,6 +435,7 @@
                     <div class="metric-title">Frecuencia / BW</div>
                     <div class="metric-value" id="rem-frec-bw">--</div>
                 </div>
+				<!--
                 <div class="metric-box" style="border-left-color: #ffaa00;">
                     <div class="metric-title">Modulación / FEC</div>
                     <div class="metric-value" id="rem-mod-fec">--</div>
@@ -443,13 +444,14 @@
                     <div class="metric-title">MAC Módem</div>
                     <div class="metric-value" id="rem-mac" style="font-family: monospace;">--</div>
                 </div>
+				-->
                 <div class="metric-box">
-                    <div class="metric-title">IP Módem Remoto</div>
-                    <div class="metric-value" id="rem-ip-modem" style="font-family: monospace;">--</div>
+                    <div class="metric-title">Módem</div>
+                    <div class="metric-value" id="rem-modem" style="font-family: monospace;">--</div>
                 </div>
                 <div class="metric-box" style="border-left-color: #ff6666;">
-                    <div class="metric-title">Demodulador / IP</div>
-                    <div class="metric-value" id="rem-demod-info" style="font-family: monospace;">--</div>
+                    <div class="metric-title">Demodulador</div>
+                    <div class="metric-value" id="rem-demod" style="font-family: monospace;">--</div>
                 </div>
             </div>
         </div>
@@ -731,16 +733,15 @@
 
         const clienteStr = p.cliente || "Sin cliente";
         const estadoStr = p.estado || "S/E";
-        document.getElementById('rem-cliente-estado').innerText = `${clienteStr} (${estadoStr})`;
+        document.getElementById('rem-cliente-estado').innerText = `${clienteStr} / ${estadoStr}`;
         document.getElementById('rem-transponder').innerText = p.transponder || "--";
-        document.getElementById('rem-frec-bw').innerText = `${p.frecuencia} MHz / ${p.bandwidth} MHz`;
-        document.getElementById('rem-mod-fec').innerText = `${p.modulacion || "--"} / ${p.fec || "--"}`;
-        document.getElementById('rem-mac').innerText = p.mac || "No registrada";
-        document.getElementById('rem-ip-modem').innerText = p.ip_modem || "Sin IP";
+        document.getElementById('rem-frec-bw').innerText = `${p.frecuencia} MHz<br>${p.bandwidth} MHz`;
+        //document.getElementById('rem-mod-fec').innerText = `${p.modulacion || "--"} / ${p.fec || "--"}`;
+        document.getElementById('rem-modem').innerText = `${p.mac}<br>{p.ip_modem}` || "No registrada";
 
         const demodNombre = p.desmodulador || "S/D";
         const demodIp = p.ip_demod || "Sin IP";
-        document.getElementById('rem-demod-info').innerText = `${demodNombre} (${demodIp})`;
+        document.getElementById('rem-demod').innerText = `${demodNombre}<br>${demodIp}`;
 
         // Resetear lecturas previas
         resetearTarjetasSnrLive();
