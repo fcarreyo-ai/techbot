@@ -334,7 +334,7 @@
         </div>
 		
 		<div class="card" style="padding: 14px 15px;">
-			<div id="vinfo">v1.2.1 - 20261119-1103 - Monitoreo Remotas</div>
+			<div id="vinfo">v1.2.1 - 20261119-1116 - Monitoreo Remotas</div>
 		</div>
     </div>
 
@@ -427,6 +427,10 @@
                     <div class="metric-title">Cliente / Estado</div>
                     <div class="metric-value" id="rem-cliente-estado">--</div>
                 </div>
+				<div class="metric-box full-width">
+                    <div class="metric-title">Características</div>
+                    <div class="metric-value" id="rem-caracteristica">--</div>
+                </div>
                 <div class="metric-box" style="border-left-color: #ff00ff;">
                     <div class="metric-title">Transponder</div>
                     <div class="metric-value" id="rem-transponder">--</div>
@@ -452,6 +456,10 @@
                 <div class="metric-box" style="border-left-color: #ff6666;">
                     <div class="metric-title">Demodulador</div>
                     <div class="metric-value" id="rem-demod" style="font-family: monospace;">--</div>
+                </div>
+				<div class="metric-box full-width">
+                    <div class="metric-title">Observaciones</div>
+                    <div class="metric-value" id="rem-observacion">--</div>
                 </div>
             </div>
         </div>
@@ -742,6 +750,9 @@
         const demodNombre = p.desmodulador || "S/D";
         const demodIp = p.ip_demod || "Sin IP";
         document.getElementById('rem-demod').innerText = `${demodNombre}\n${demodIp}`;
+		
+		document.getElementById('rem-caracteristica').innerText = `${p.caracteristica}`;
+		document.getElementById('rem-observacion').innerText = `${p.observacion}`;
 
         // Resetear lecturas previas
         resetearTarjetasSnrLive();
