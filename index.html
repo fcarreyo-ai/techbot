@@ -334,7 +334,7 @@
         </div>
 		
 		<div class="card" style="padding: 14px 15px;">
-			<div id="vinfo">v1.2.1 - 20261119-1120 - Monitoreo Remotas</div>
+			<div id="vinfo">v1.2.1 - 20261119-1157 - Monitoreo Remotas</div>
 		</div>
     </div>
 
@@ -829,7 +829,7 @@
             // 2. Polling con auto-limpieza (máx ~30 segundos -> 20 intentos de 1.5s)
             const maxIntentos = 20;
             for (let intento = 1; intento <= maxIntentos; intento++) {
-                await new Promise(r => setTimeout(r, 1500));
+                await new Promise(r => setTimeout(r, 1000));
                 if (consultaLiveActivaId !== reqId) return; // Usuario cambió de estación
 
                 const segTranscurridos = ((performance.now() - tInicio) / 1000).toFixed(1);
